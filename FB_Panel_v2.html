@@ -532,8 +532,8 @@
 // ════════════════════════════════
 // CONFIG — REEMPLAZAR DESPUÉS DEL SETUP
 // ════════════════════════════════
-const SCRIPT_URL  = 'https://script.google.com/macros/s/AKfycbz3NTwMATDsfpWuIa9xGH6ndB6MMihkEiO7jn-SFeGi9OZpkR4yEY_zPyIfIKnpGUBu/exec';
-const TRELLO_URL  = 'https://trello.com/b/REEMPLAZAR';
+const SCRIPT_URL  = 'https://script.google.com/macros/s/AKfycbz_wMxa9kcY0kuY6oF1ZyMsQENZbmb_WNOn9RbCPAJoXA2sDhWPPdtso4swp7wAzBvZ/exec';
+const TRELLO_URL  = 'https://trello.com/b/6467f392487974ce37e8eb16';
 const CLIP_URL    = 'https://dashboard.clip.mx/';
 let CORREOS = { alta:'', fac:'', prod:'' };
 let DATOS_BANCO = 'Banco: BBVA\nCuenta: COMPLETAR\nCLABE: COMPLETAR\nBeneficiario: FB Drinkware S.A. de C.V.';
@@ -663,52 +663,66 @@ function renderLista(lista, contenedorId, esPorAtender) {
   }).join('');
 }
 
-// New: render pendientes grouped by stage
+// Render pendientes grouped by stage - each pedido in ONE section only
 function renderPendientesPorEtapa(todos) {
   const secciones = [
     { id:'s1', icon:'🔴', label:'Sin atender', color:'#fee2e2',
       filtro: p => p.estado === 'Cotización' },
     { id:'s2', icon:'📧', label:'Alta de cliente pendiente', color:'#fef3c7',
-      filtro: p => p.esNuevo !== 'No' && !p.pasoAlta && !['Cotización','Entregado','Cancelado'].includes(p.estado) },
+      filtro: p => p.estado !== 'Cotización' && !['Entregado','Cancelado'].includes(p.estado)
+        && p.pasos && !p.pasos['alta-epicor']?.ok },
     { id:'s3', icon:'💳', label:'Gestión de pago pendiente', color:'#ede9fe',
-      filtro: p => !p.pasoPago && ['Venta','Alta de cliente','Gestión de pago'].includes(p.estado) },
+      filtro: p => p.estado !== 'Cotización' && !['Entregado','Cancelado'].includes(p.estado)
+        && p.pasos?.['alta-epicor']?.ok && !p.pasos?.['pago']?.ok },
     { id:'s4', icon:'🎨', label:'Diseño pendiente de aprobación', color:'#fce7f3',
-      filtro: p => (p.grabado==='Sí'||p.nombresPorVaso==='Sí'||p.nombresIndividuales==='Sí') && !p.pasoDisenoAprobado && !['Cotización','Entregado','Cancelado'].includes(p.estado) },
+      filtro: p => p.estado !== 'Cotización' && !['Entregado','Cancelado'].includes(p.estado)
+        && p.pasos?.['pago']?.ok
+        && (p.grabado==='Sí'||p.nombresIndividuales==='Sí'||p.nombresPorVaso==='Sí')
+        && !p.pasos?.['diseno-aprobado']?.ok },
     { id:'s5', icon:'📤', label:'Solicitud de producción pendiente', color:'#e0f2fe',
-      filtro: p => p.ovEpicor && !p.pasoProduccion && p.estado !== 'En producción' && !['Cotización','Entregado','Cancelado'].includes(p.estado) },
-    { id:'s6', icon:'🏭', label:'En producción (iniciada)', color:'#dbeafe',
-      filtro: p => p.estado === 'En producción' && p.produccionIniciada === 'Sí' },
+      filtro: p => p.estado !== 'Cotización' && !['Entregado','Cancelado','En producción','En camino'].includes(p.estado)
+        && p.pasos?.['pago']?.ok && p.ovEpicor && !p.pasos?.['produccion']?.ok },
+    { id:'s6', icon:'🏭', label:'En producción', color:'#dbeafe',
+      filtro: p => p.estado === 'En producción' },
     { id:'s7', icon:'📦', label:'En camino', color:'#d1fae5',
       filtro: p => p.estado === 'En camino' },
     { id:'s8', icon:'⭐', label:'Post-venta pendiente', color:'#fef9c3',
-      filtro: p => p.estado === 'Entregado' && !p.pasoPostventa },
+      filtro: p => p.estado === 'Entregado' && !p.pasos?.['postventa']?.ok },
   ];
 
   const cont = document.getElementById('lista-por-etapa');
   if (!cont) return;
 
-  let html = '';
+  // Each pedido → only first matching section
+  const asignado = {};
   secciones.forEach(sec => {
-    const items = todos.filter(sec.filtro);
+    todos.forEach(p => { if (!asignado[p.id] && sec.filtro(p)) asignado[p.id] = sec.id; });
+  });
+
+  let out = '';
+  secciones.forEach(sec => {
+    const items = todos.filter(p => asignado[p.id] === sec.id);
     if (!items.length) return;
-    html += `<div class="seccion-pendiente" style="color:#184273">
+    out += `<div class="seccion-pendiente" style="color:#184273">
       <span style="background:${sec.color};padding:2px 8px;border-radius:8px;font-size:10px;">${sec.icon} ${sec.label}</span>
-      <span class="text-fb-silver font-normal">(${items.length})</span>
+      <span class="text-fb-silver font-normal ml-1">(${items.length})</span>
     </div>`;
-    html += items.map(p => `
-      <div class="pendiente-card" onclick="cargarPedidoDesdeListado('${p.id}')">
+    out += items.map(p => {
+      const nombre = p.empresa || p.contacto || p.id;
+      return `<div class="pendiente-card" onclick="cargarPedidoDesdeListado('${p.id}')">
         <div class="flex items-start justify-between gap-2">
           <div>
             <div class="font-mono text-[10px] text-fb-silver">${p.id}</div>
-            <div class="font-bold text-fb-dark text-sm">${p.empresa||p.contacto}</div>
-            <div class="text-xs text-fb-mid">${p.contacto} · ${p.asesorCodigo}</div>
+            <div class="font-bold text-fb-dark text-sm">${nombre}</div>
+            <div class="text-xs text-fb-mid">${p.contacto||''} · ${p.asesorCodigo||''}</div>
           </div>
           <span class="badge ${badgeEstado(p.estado)} text-[10px]">${p.estado}</span>
         </div>
-      </div>`).join('');
+      </div>`;
+    }).join('');
   });
 
-  cont.innerHTML = html || '<p class="text-xs text-fb-silver text-center py-4">Sin pedidos pendientes ✅</p>';
+  cont.innerHTML = out || '<p class="text-xs text-fb-silver text-center py-4">Sin pedidos pendientes</p>';
 }
 
 function calcPendientes(p) {
@@ -731,11 +745,14 @@ function badgeEstado(e) {
 }
 
 async function cargarPedidoDesdeListado(fbk) {
+  showLoading('Cargando pedido...');
   const res = await apiGet('getPedido', { fbk });
+  hideLoading();
   if (!res.ok) { showToast('Error al cargar pedido', 'error'); return; }
   S.pedido = res.pedido;
   S.pasos  = res.pedido.pasos || {};
   S.produccionIniciada = res.pedido.produccionIniciada === 'Sí';
+  guardarSession();
   renderSeguimiento();
   showTab('tab-seguimiento', document.querySelectorAll('.tab-btn')[3]);
 }
@@ -829,22 +846,27 @@ function irCaptura() {
   if (p.grabado)        setVal('f-grabado', p.grabado);
   if (p.nombresPorVaso) setVal('f-nombres', p.nombresPorVaso);
 
-  // Pre-llenar con datos ya guardados del panel
-  if (p.razonSocial) {
-    setVal('f-razon', p.razonSocial);
-    setVal('f-dom-fiscal', p.domFiscal);
-    setVal('f-ciudad-fiscal', p.ciudadFiscal);
-    setVal('f-estado-fiscal', p.estadoFiscal);
-    setVal('f-cp-fiscal', p.cpFiscal);
-    setVal('f-regimen', p.regimenFiscal);
-    setVal('f-cfdi', p.usoCFDI);
-    setVal('f-metodo-sat', p.metodoPagoSAT);
-    setVal('f-dir-envio', p.dirEnvio === 'PENDIENTE' ? '' : p.dirEnvio);
-    setVal('f-ciudad-envio', p.ciudadEnvio || p.ciudadPedido);
-    setVal('f-estado-envio', p.estadoEnvio);
-    setVal('f-cp-envio', p.cpEnvio || p.cpPedido);
-    setVal('f-entrega', p.tipoEntrega);
-    setVal('f-comentarios', p.comentarios);
+  // Siempre pre-llenar datos guardados del panel (sin gate condition)
+  setVal('f-razon', p.razonSocial);
+  setVal('f-dom-fiscal', p.domFiscal);
+  setVal('f-ciudad-fiscal', p.ciudadFiscal);
+  setVal('f-estado-fiscal', p.estadoFiscal);
+  setVal('f-cp-fiscal', p.cpFiscal);
+  setVal('f-regimen', p.regimenFiscal);
+  setVal('f-cfdi', p.usoCFDI);
+  setVal('f-metodo-sat', p.metodoPagoSAT);
+  setVal('f-dir-envio', (p.dirEnvio === 'PENDIENTE' || !p.dirEnvio) ? '' : p.dirEnvio);
+  setVal('f-ciudad-envio', p.ciudadEnvio || p.ciudadPedido);
+  setVal('f-estado-envio', p.estadoEnvio);
+  setVal('f-cp-envio', p.cpEnvio || p.cpPedido);
+  setVal('f-entrega', p.tipoEntrega);
+  setVal('f-comentarios', p.comentarios);
+  // Grabado y nombres — siempre
+  const grabadoVal = p.grabado || p.grabadoPedido || '';
+  const nombresVal = p.nombresIndividuales || p.nombresPorVaso || '';
+  if (grabadoVal) setVal('f-grabado', grabadoVal);
+  if (nombresVal) setVal('f-nombres', nombresVal);
+  if (p.razonSocial || p.regimenFiscal || p.tipoEntrega) {
     document.getElementById('badge-cliente-cap').className = 'tag-exist';
     document.getElementById('badge-cliente-cap').textContent = 'Datos cargados';
     document.getElementById('btn-editar-cap').style.display = 'block';
@@ -859,7 +881,16 @@ function irCaptura() {
 
 function setVal(id, val) {
   const el = document.getElementById(id);
-  if (el && val) el.value = val;
+  if (!el || val === undefined || val === null) return;
+  const strVal = val.toString();
+  if (!strVal) return;
+  el.value = strVal;
+  // For selects, verify match - try partial match if exact fails
+  if (el.tagName === 'SELECT' && el.value !== strVal) {
+    const opts = Array.from(el.options);
+    const match = opts.find(o => o.value.includes(strVal) || strVal.includes(o.value.split(' - ')[0]));
+    if (match) el.value = match.value;
+  }
 }
 
 async function buscarDuplicados(tel) {
@@ -973,20 +1004,28 @@ async function guardarCaptura() {
   }, 700);
 }
 
+function vDisabled(id) {
+  // Read value even from disabled elements
+  const el = document.getElementById(id);
+  return el ? el.value.trim() : '';
+}
+
 function recogerDatos() {
   return {
-    razonSocial:    v('f-razon'), nombreComercial: v('f-comercial'),
-    rfc:            v('f-rfc').toUpperCase(), nombreContacto: v('f-contacto'),
+    razonSocial:    vDisabled('f-razon'), nombreComercial: vDisabled('f-comercial'),
+    rfc:            vDisabled('f-rfc').toUpperCase(), nombreContacto: v('f-contacto'),
     telefono:       v('f-telefono'), correo: v('f-correo'),
-    domFiscal:      v('f-dom-fiscal'), ciudadFiscal: v('f-ciudad-fiscal'),
-    estadoFiscal:   v('f-estado-fiscal'), cpFiscal: v('f-cp-fiscal'),
-    regimenFiscal:  v('f-regimen'), usoCFDI: v('f-cfdi'),
-    metodoPagoSAT:  v('f-metodo-sat'), formaPago: v('f-forma-pago'),
+    domFiscal:      vDisabled('f-dom-fiscal'), ciudadFiscal: vDisabled('f-ciudad-fiscal'),
+    estadoFiscal:   vDisabled('f-estado-fiscal'), cpFiscal: vDisabled('f-cp-fiscal'),
+    regimenFiscal:  vDisabled('f-regimen'), usoCFDI: vDisabled('f-cfdi'),
+    metodoPagoSAT:  vDisabled('f-metodo-sat'), formaPago: v('f-forma-pago'),
     dirEnvio:       v('f-dir-envio') || 'PENDIENTE',
     ciudadEnvio:    v('f-ciudad-envio'), estadoEnvio: v('f-estado-envio'),
     cpEnvio:        v('f-cp-envio'), tipoEntrega: v('f-entrega'),
-    fechaLimite:    v('f-fecha-limite'), grabado: v('f-grabado'),
-    nombresIndividuales: v('f-nombres'), comentarios: v('f-comentarios'),
+    fechaLimite:    v('f-fecha-limite'),
+    grabado:        v('f-grabado') || S.pedido?.grabado || S.pedido?.grabadoPedido || 'No',
+    nombresIndividuales: v('f-nombres') || S.pedido?.nombresIndividuales || S.pedido?.nombresPorVaso || 'No',
+    comentarios:    v('f-comentarios'),
     asesorNombre:   S.asesor.nombre, asesorCodigo: S.asesor.codigo,
   };
 }
@@ -1009,7 +1048,12 @@ function renderSeguimiento() {
   document.getElementById('seg-contenido').style.display = 'block';
 
   document.getElementById('seg-id').textContent = p.id;
-  document.getElementById('seg-nombre').textContent = p.razonSocial || p.nombreComercial || p.nombreContacto || p.empresa || '—';
+  // If PG, show contact name as main identifier
+  const esPG = p.razonSocial === 'PUBLICO EN GENERAL';
+  const nombreDisplay = esPG
+    ? (p.nombreContacto || p.nombreComercial || p.empresa || 'Público en General')
+    : (p.nombreComercial || p.razonSocial || p.nombreContacto || p.empresa || '—');
+  document.getElementById('seg-nombre').textContent = nombreDisplay;
   document.getElementById('seg-meta').textContent = (p.tipoEntrega||'') + ' · ' + (p.formaPago||'') + (p.fechaLimite ? ' · Límite: '+p.fechaLimite : '');
   document.getElementById('seg-estado-badge').textContent = p.estado;
   document.getElementById('seg-estado-badge').className = 'badge ' + badgeEstado(p.estado);
@@ -1093,11 +1137,12 @@ function renderPasos() {
         </div>` : '',
     },
     { id:'fac-anticipo', num:'2', titulo:'Factura de anticipo', icono:'🧾',
-      sub: 'Solo si el cliente lo solicitó expresamente',
+      sub: ps['fac-anticipo']?.noAplica ? 'No aplica — Público en General' :
+           ps['fac-anticipo']?.ok ? 'Correo enviado' : 'Solo si el cliente lo solicitó expresamente',
       done: !!(ps['fac-anticipo']?.ok),
-      accion: () => abrirModalAnticipo(),
+      accion: ps['fac-anticipo']?.noAplica ? null : () => abrirModalAnticipo(),
       accionLabel: 'Abrir Gmail',
-      tooltip: !ps['fac-anticipo']?.ok ? 'Recuerda: primero intenta convencer al cliente de esperar la factura de producto' : null,
+      tooltip: !ps['fac-anticipo']?.ok && !ps['fac-anticipo']?.noAplica ? 'Recuerda: primero intenta convencer al cliente de esperar la factura de producto' : null,
     },
     { id:'pago', num:'3', titulo:'Gestionar pago', icono: p.formaPago?.includes('TDC') ? '💳' : '🏦',
       sub: p.formaPago?.includes('TDC') ? 'Generar link CLIP' : 'Compartir datos de transferencia',
@@ -1212,6 +1257,16 @@ function renderPasos() {
       </div>
     </div>`;
   }).join('');
+}
+
+async function marcarPasoLocal(id, valor) {
+  const ts = new Date().toLocaleString('es-MX');
+  S.pasos[id] = { ok: valor, ts };
+  guardarSession();
+  try {
+    await apiPost({ action:'marcarPaso', fbk:S.pedido.id, paso:id, valor, ts, quien:S.asesor.nombre });
+  } catch(e) { console.warn('marcarPaso err:', e); }
+  renderPasos();
 }
 
 function ejecutarPaso(id) {
@@ -1749,32 +1804,56 @@ function togglePublicoGeneral(el) {
                   'f-regimen','f-cfdi','f-metodo-sat'];
   const camposPrinc = ['f-rfc','f-razon','f-comercial'];
   if (el.checked) {
+    // Use contact name as nombre comercial so it shows as person's name, not "PUBLICO EN GENERAL"
+    const nombreContacto = S.pedido?.nombreContacto || document.getElementById('f-contacto')?.value || 'PUBLICO EN GENERAL';
     setVal('f-rfc', 'XAXX010101000');
     setVal('f-razon', 'PUBLICO EN GENERAL');
-    setVal('f-comercial', 'PUBLICO EN GENERAL');
+    setVal('f-comercial', nombreContacto);
     setVal('f-regimen', '616 - Sin Obligaciones Fiscales');
     setVal('f-cfdi', 'S01 - Sin efectos fiscales');
+    setVal('f-metodo-sat', 'PUE');
     [...campos, ...camposPrinc].forEach(id => {
       const e = document.getElementById(id);
       if (e) { e.disabled = true; e.style.opacity = '0.5'; }
     });
+    // Mark factura anticipo as not applicable
+    if (S.pedido?.id && !S.pasos['fac-anticipo']?.ok) {
+      const ts = new Date().toLocaleString('es-MX');
+      S.pasos['fac-anticipo'] = { ok: true, ts, noAplica: true };
+      apiPost({ action:'marcarPaso', fbk:S.pedido.id, paso:'fac-anticipo',
+        valor:true, ts, quien:S.asesor?.nombre||'Panel' });
+    }
   } else {
     [...campos, ...camposPrinc].forEach(id => {
       const e = document.getElementById(id);
       if (e) { e.disabled = false; e.style.opacity = '1'; }
     });
+    // Unmark factura anticipo if it was marked as noAplica
+    if (S.pasos['fac-anticipo']?.noAplica) {
+      delete S.pasos['fac-anticipo'];
+    }
   }
 }
 
 // Confirmar pago por transferencia
 async function confirmarPagoTransf() {
-  document.getElementById('modal-transf').style.display = 'none';
+  const modal = document.getElementById('modal-transf');
+  if (modal) modal.style.display = 'none';
   showLoading('Registrando pago...');
-  await apiPost({ action:'cambiarEstado', fbk:S.pedido.id, estado:'Gestión de pago', quien:S.asesor.nombre });
-  S.pedido.estado = 'Gestión de pago';
-  await marcarPasoLocal('pago', true);
-  hideLoading();
-  showToast('Pago registrado');
+  try {
+    await apiPost({ action:'cambiarEstado', fbk:S.pedido.id, estado:'Gestion de pago', quien:S.asesor.nombre });
+    S.pedido.estado = 'Gestión de pago';
+    const ts = new Date().toLocaleString('es-MX');
+    S.pasos['pago'] = { ok:true, ts };
+    guardarSession();
+    await apiPost({ action:'marcarPaso', fbk:S.pedido.id, paso:'pago', valor:true, ts, quien:S.asesor.nombre });
+    renderPasos();
+    showToast('Pago registrado');
+  } catch(e) {
+    showToast('Error al registrar pago', 'error');
+  } finally {
+    hideLoading();
+  }
 }
 
 // Save shipping cost
