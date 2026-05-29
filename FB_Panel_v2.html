@@ -70,10 +70,23 @@
 .pill-estado{font-size:10px;font-weight:700;padding:2px 10px;border-radius:10px;cursor:pointer;border:1.5px solid transparent;transition:all .15s}
 .pill-estado.sel{border-color:#184273;background:#184273;color:#fff}
 .pill-estado:not(.sel){background:#f1f0f0;color:#566876}
+.loading-overlay{position:fixed;inset:0;background:rgba(24,66,115,.55);z-index:500;display:none;align-items:center;justify-content:center;flex-direction:column;gap:12px}
+.loading-overlay.show{display:flex}
+.spinner{width:44px;height:44px;border:4px solid rgba(255,255,255,.3);border-top-color:#fff;border-radius:50%;animation:spin .8s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+.loading-msg{color:#fff;font-size:13px;font-weight:600}
+.btn-primary:disabled,.btn-action:disabled{opacity:.5;pointer-events:none;cursor:not-allowed}
+.upload-zone.drag-over{border-color:#184273;background:#EBF2FA}
+.seccion-pendiente{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;padding:8px 0 6px;color:#566876;display:flex;align-items:center;gap:6px;margin-top:12px;border-top:1px solid #e5e7eb}
+.seccion-pendiente:first-child{margin-top:0;border-top:none}
 </style>
 </head>
 <body class="pb-28">
 <div class="toast" id="toast"></div>
+<div class="loading-overlay" id="loading-overlay">
+  <div class="spinner"></div>
+  <div class="loading-msg" id="loading-msg">Procesando...</div>
+</div>
 
 <!-- ══ LOGIN GOOGLE ══ -->
 <div id="pantalla-login" class="min-h-screen flex items-center justify-center p-4">
@@ -125,15 +138,11 @@
 <!-- ══ TAB PENDIENTES ══ -->
 <div class="screen active" id="tab-pendientes">
   <div class="card">
-    <div class="seccion">⚡ Por atender — llegaron del catálogo sin procesar</div>
-    <div id="lista-por-atender"><p class="text-xs text-fb-silver text-center py-4">Cargando...</p></div>
-  </div>
-  <div class="card">
-    <div class="seccion">🔄 En proceso — con pasos pendientes</div>
-    <div id="lista-en-proceso"><p class="text-xs text-fb-silver text-center py-4">Cargando...</p></div>
-  </div>
-  <div class="text-center mt-2">
-    <button onclick="cargarPendientes()" class="btn-outline text-xs">↺ Actualizar lista</button>
+    <div class="flex items-center justify-between mb-3">
+      <div class="seccion mb-0">📋 Pedidos por etapa</div>
+      <button onclick="cargarPendientes()" class="btn-outline text-xs">↺ Actualizar</button>
+    </div>
+    <div id="lista-por-etapa"><p class="text-xs text-fb-silver text-center py-4">Cargando...</p></div>
   </div>
 </div>
 
@@ -242,8 +251,11 @@
         <label>CSF (PDF) — se guardará en Drive
           <span class="text-red-500 font-normal normal-case text-xs ml-1">⚠️ Verifica que los datos coincidan con la CSF</span>
         </label>
-        <div class="upload-zone" onclick="document.getElementById('inp-csf').click()">
-          📄 Subir Constancia de Situación Fiscal (PDF no escáner)
+        <div class="upload-zone" id="zone-csf"
+          onclick="document.getElementById('inp-csf').click()"
+          ondragover="dragOver(event,'zone-csf')" ondragleave="dragLeave('zone-csf')"
+          ondrop="dropFile(event,'inp-csf','csf-preview',previewCSF)">
+          📄 Arrastra aquí o toca para subir la CSF (PDF no escáner)
           <div id="csf-preview" class="mt-1 text-fb-dark font-bold text-xs"></div>
         </div>
         <input type="file" id="inp-csf" accept=".pdf" style="display:none" onchange="previewCSF(this)">
@@ -283,7 +295,22 @@
         <div class="campo"><label>¿Nombres individuales?</label>
           <select id="f-nombres"><option value="No">No</option><option value="Sí">Sí</option></select></div>
       </div>
-      <div class="campo">
+      <!-- Costo de envío -->
+      <div class="card" style="background:#f0f9ff;border:1px dashed #0ea5e9;padding:12px 16px;margin-bottom:0;border-radius:12px">
+        <div class="flex items-center justify-between mb-2">
+          <span class="text-xs font-bold text-fb-dark">📦 Costo de envío al cliente</span>
+          <button onclick="toggleEnvioLinea()" id="btn-toggle-envio" class="btn-outline text-xs py-1">+ Agregar</button>
+        </div>
+        <div id="envio-linea" style="display:none">
+          <div class="campo">
+            <label>Monto del envío (MXN, con IVA)</label>
+            <input type="number" id="f-costo-envio" placeholder="Ej: 250" min="0" step="0.01"
+              oninput="actualizarTotalConEnvio()">
+          </div>
+          <p class="text-[10px] text-fb-silver mt-1">Se agregará como línea "Gastos de Envío · [Cliente]" en la tabla de productos.</p>
+        </div>
+      </div>
+      <div class="campo mt-3">
         <label>Comentarios internos</label>
         <textarea id="f-comentarios" placeholder="Notas del asesor, acuerdos especiales, detalles del evento..."></textarea>
       </div>
@@ -367,7 +394,7 @@
   <div class="card">
     <div class="seccion">👑 Vista Administrador</div>
     <p class="text-xs text-fb-silver mb-4">Acceso completo a todos los pedidos y métricas del equipo.</p>
-    <a href="https://docs.google.com/spreadsheets/d/15gIhiK1jpMcXM8uVCpq6nWZqVNcUO3O--e8acrOIe58" target="_blank"
+    <a href="https://docs.google.com/spreadsheets/d/REEMPLAZAR_CON_ID_SHEETS_NUEVO" target="_blank"
        class="btn-outline text-sm inline-block text-center w-full">📊 Abrir Sheets completo</a>
   </div>
 </div>
@@ -437,12 +464,29 @@
   </div>
 </div>
 
+<!-- ══ MODAL ANTICIPO ══ -->
+<div class="modal-overlay" id="modal-anticipo" style="display:none">
+  <div class="modal-box">
+    <h3 class="font-black text-fb-dark text-base mb-1">🧾 Factura de anticipo</h3>
+    <p class="text-xs text-fb-silver mb-3">Verifica el monto y edítalo si el anticipo es parcial.</p>
+    <div class="campo mb-4">
+      <label>Monto sin IVA (base gravable)</label>
+      <input type="number" id="inp-monto-anticipo" placeholder="0.00" step="0.01" min="0">
+      <p class="text-[10px] text-fb-silver mt-1">Pre-llenado con subtotal ÷ 1.16. Modifica si el anticipo es un porcentaje del total.</p>
+    </div>
+    <div class="flex gap-3">
+      <button onclick="confirmarAnticipo()" class="btn-primary flex-1" style="width:auto">Abrir Gmail →</button>
+      <button onclick="cerrarModal('modal-anticipo')" class="btn-outline flex-1">Cancelar</button>
+    </div>
+  </div>
+</div>
+
 <script>
 // ════════════════════════════════
 // CONFIG — REEMPLAZAR DESPUÉS DEL SETUP
 // ════════════════════════════════
-const SCRIPT_URL  = 'https://script.google.com/macros/s/AKfycbz_wMxa9kcY0kuY6oF1ZyMsQENZbmb_WNOn9RbCPAJoXA2sDhWPPdtso4swp7wAzBvZ/exec';
-const TRELLO_URL  = 'https://trello.com/invite/b/6467f392487974ce37e8eb16/ATTI31280fea07ed3320280789b5a2ec87f00C8ED1C9/fb-drinkware';
+const SCRIPT_URL  = 'REEMPLAZAR_CON_URL_APPS_SCRIPT_PANEL_V2';
+const TRELLO_URL  = 'https://trello.com/b/REEMPLAZAR';
 const CLIP_URL    = 'https://dashboard.clip.mx/';
 let CORREOS = { alta:'', fac:'', prod:'' };
 let DATOS_BANCO = 'Banco: BBVA\nCuenta: COMPLETAR\nCLABE: COMPLETAR\nBeneficiario: FB Drinkware S.A. de C.V.';
@@ -534,10 +578,12 @@ async function cargarConfig() {
 // PENDIENTES
 // ════════════════════════════════
 async function cargarPendientes() {
+  document.getElementById('lista-por-etapa').innerHTML = '<p class="text-xs text-fb-silver text-center py-4">Cargando...</p>';
   const res = await apiGet('getPendientes', { correo: S.asesor.correo });
   if (!res.ok) return;
-  renderLista(res.porAtender, 'lista-por-atender', true);
-  renderLista(res.enProceso,  'lista-en-proceso',  false);
+  // Combine all non-completed pedidos
+  const todos = [...(res.porAtender||[]), ...(res.enProceso||[])];
+  renderPendientesPorEtapa(todos);
 }
 
 function renderLista(lista, contenedorId, esPorAtender) {
@@ -559,7 +605,7 @@ function renderLista(lista, contenedorId, esPorAtender) {
           <span class="badge ${badgeCls}">${p.estado}</span>
           ${pendientes.length ? `
           <div class="tooltip-wrap">
-            <span class="text-orange-500 text-[10px] font-bold">⚠️ ${pendientes.length} pendiente(s)</span>
+            <span class="text-orange-500 text-[10px] font-bold">⚠️ ${pendientes.length} pend.</span>
             <div class="tooltip-box">${tooltip}</div>
           </div>` : '<span class="text-green-600 text-[10px] font-bold">✅ Al día</span>'}
         </div>
@@ -568,12 +614,62 @@ function renderLista(lista, contenedorId, esPorAtender) {
   }).join('');
 }
 
+// New: render pendientes grouped by stage
+function renderPendientesPorEtapa(todos) {
+  const secciones = [
+    { id:'s1', icon:'🔴', label:'Sin atender', color:'#fee2e2',
+      filtro: p => p.estado === 'Cotización' },
+    { id:'s2', icon:'📧', label:'Alta de cliente pendiente', color:'#fef3c7',
+      filtro: p => p.esNuevo !== 'No' && !p.pasoAlta && !['Cotización','Entregado','Cancelado'].includes(p.estado) },
+    { id:'s3', icon:'💳', label:'Gestión de pago pendiente', color:'#ede9fe',
+      filtro: p => !p.pasoPago && ['Venta','Alta de cliente','Gestión de pago'].includes(p.estado) },
+    { id:'s4', icon:'🎨', label:'Diseño pendiente de aprobación', color:'#fce7f3',
+      filtro: p => (p.grabado==='Sí'||p.nombresPorVaso==='Sí'||p.nombresIndividuales==='Sí') && !p.pasoDisenoAprobado && !['Cotización','Entregado','Cancelado'].includes(p.estado) },
+    { id:'s5', icon:'📤', label:'Solicitud de producción pendiente', color:'#e0f2fe',
+      filtro: p => p.ovEpicor && !p.pasoProduccion && p.estado !== 'En producción' && !['Cotización','Entregado','Cancelado'].includes(p.estado) },
+    { id:'s6', icon:'🏭', label:'En producción (iniciada)', color:'#dbeafe',
+      filtro: p => p.estado === 'En producción' && p.produccionIniciada === 'Sí' },
+    { id:'s7', icon:'📦', label:'En camino', color:'#d1fae5',
+      filtro: p => p.estado === 'En camino' },
+    { id:'s8', icon:'⭐', label:'Post-venta pendiente', color:'#fef9c3',
+      filtro: p => p.estado === 'Entregado' && !p.pasoPostventa },
+  ];
+
+  const cont = document.getElementById('lista-por-etapa');
+  if (!cont) return;
+
+  let html = '';
+  secciones.forEach(sec => {
+    const items = todos.filter(sec.filtro);
+    if (!items.length) return;
+    html += `<div class="seccion-pendiente" style="color:#184273">
+      <span style="background:${sec.color};padding:2px 8px;border-radius:8px;font-size:10px;">${sec.icon} ${sec.label}</span>
+      <span class="text-fb-silver font-normal">(${items.length})</span>
+    </div>`;
+    html += items.map(p => `
+      <div class="pendiente-card" onclick="cargarPedidoDesdeListado('${p.id}')">
+        <div class="flex items-start justify-between gap-2">
+          <div>
+            <div class="font-mono text-[10px] text-fb-silver">${p.id}</div>
+            <div class="font-bold text-fb-dark text-sm">${p.empresa||p.contacto}</div>
+            <div class="text-xs text-fb-mid">${p.contacto} · ${p.asesorCodigo}</div>
+          </div>
+          <span class="badge ${badgeEstado(p.estado)} text-[10px]">${p.estado}</span>
+        </div>
+      </div>`).join('');
+  });
+
+  cont.innerHTML = html || '<p class="text-xs text-fb-silver text-center py-4">Sin pedidos pendientes ✅</p>';
+}
+
 function calcPendientes(p) {
   const pend = [];
-  if (!p.ovEpicor) pend.push('Falta OV EPICOR');
-  if (!p.dirEnvio || p.dirEnvio === 'PENDIENTE') pend.push('Falta dirección de envío');
-  if (!p.urlCSF) pend.push('Falta CSF');
-  if (p.estado === 'Cotización') pend.push('Cambiar estado a Venta');
+  const estadoFinal = ['Entregado','Cancelado'].includes(p.estado);
+  if (!estadoFinal) {
+    if (!p.ovEpicor) pend.push('Falta OV EPICOR');
+    if (!p.dirEnvio || p.dirEnvio === 'PENDIENTE') pend.push('Falta dirección de envío');
+    if (p.estado === 'Cotización') pend.push('Cambiar estado a Venta');
+  }
   return pend;
 }
 
@@ -771,23 +867,36 @@ async function guardarCaptura() {
     if (!document.getElementById(id).value.trim())
       return showToast('Completa los campos obligatorios (*)', 'error');
   }
+  showLoading('Guardando datos del cliente...');
   const datos = recogerDatos();
+  // Add shipping cost line if present
+  const costoEnvio = parseFloat(document.getElementById('f-costo-envio')?.value) || 0;
+  if (costoEnvio > 0) {
+    datos.costoEnvio = costoEnvio;
+    datos.envioDesc = 'Gastos de Envio · ' + (datos.nombreComercial || datos.razonSocial);
+  }
 
   if (S.csfFile) {
-    showToast('Subiendo CSF a Drive...');
+    showLoading('Subiendo CSF a Drive...');
     const b64 = await fileToBase64(S.csfFile);
-    const res = await apiPost({ action:'subirCSF', base64:b64,
+    const res = await apiPostWithData({ action:'subirCSF', base64:b64,
       filename:S.csfFile.name,
       nombreCliente: datos.razonSocial || datos.nombreComercial,
       fbk: S.pedido.id, quien: S.asesor.nombre });
-    if (res.ok) datos.urlCSF = res.url;
+    if (res && res.ok && res.url) {
+      datos.urlCSF = res.url;
+      S.pedido.urlCSF = res.url;
+    }
+    hideLoading();
   }
 
   await apiPost({ action:'guardarDatosCliente', fbk:S.pedido.id, datos, quien:S.asesor.nombre });
   await apiPost({ action:'guardarCliente', ...datos, fbkOrigen:S.pedido.id, creadoPor:S.asesor.nombre });
 
   Object.assign(S.pedido, datos);
+  // Preserve existing pasos - DO NOT reset them on edit
   guardarSession();
+  hideLoading();
   showToast('Datos guardados ✅');
   setTimeout(() => {
     renderSeguimiento();
@@ -852,10 +961,11 @@ function renderSeguimiento() {
     ['Dirección envío', pendDir ? 'PENDIENTE' : p.dirEnvio, pendDir],
     ['Forma de pago', p.formaPago||'—'],
     ['Fecha límite', p.fechaLimite||'—'],
+    ['CSF', p.urlCSF ? '✅ Subida' : '—', false, p.urlCSF],
   ];
-  document.getElementById('seg-chips').innerHTML = chips.map(([l,val,warn]) =>
+  document.getElementById('seg-chips').innerHTML = chips.map(([l,val,warn,link]) =>
     `<div class="chip"><div class="lbl">${l}</div>
-     <div class="val ${warn?'pendiente':''}">${val||'—'}${warn?` <span class="tooltip-wrap">ℹ️<span class="tooltip-box">Dirección de envío pendiente de confirmar con el cliente</span></span>`:''}</div>
+     <div class="val ${warn?'pendiente':''}">${link?`<a href="${link}" target="_blank" class="underline">${val}</a>`:val||'—'}${warn?` <span class="tooltip-wrap">ℹ️<span class="tooltip-box">Dirección de envío pendiente de confirmar con el cliente</span></span>`:''}</div>
     </div>`).join('');
 
   // Pedidos vinculados
@@ -881,7 +991,7 @@ function renderPasos() {
   const ps = S.pasos || {};
   const esNuevo    = !(p.razonSocial);
   const tieneOV    = !!(p.ovEpicor);
-  const deseño     = p.grabado === 'Sí' || p.nombresPorVaso === 'Sí';
+  const deseño     = p.grabado === 'Sí' || p.nombresPorVaso === 'Sí' || p.nombresIndividuales === 'Sí';
   const trelloDone = !!(ps['diseno-trello']?.ok);
   const disenoDone = !!(ps['diseno-aprobado']?.ok);
   const prodIniciada = S.produccionIniciada;
@@ -902,7 +1012,7 @@ function renderPasos() {
     { id:'fac-anticipo', num:'2', titulo:'Factura de anticipo', icono:'🧾',
       sub: 'Solo si el cliente lo solicitó expresamente',
       done: !!(ps['fac-anticipo']?.ok),
-      accion: () => gmailFactura(),
+      accion: () => abrirModalAnticipo(),
       accionLabel: 'Abrir Gmail',
       tooltip: !ps['fac-anticipo']?.ok ? 'Recuerda: primero intenta convencer al cliente de esperar la factura de producto' : null,
     },
@@ -945,11 +1055,21 @@ function renderPasos() {
           <div class="campo"><label>Link carpeta OneDrive</label>
             <input type="text" id="inp-onedrive" placeholder="https://onedrive..." value="${p.urlOneDrive||''}"></div>
           <div class="campo"><label>PDF de muestra del diseño</label>
-            <div class="upload-zone text-xs" onclick="document.getElementById('inp-pdf-prod').click()">
-              📎 Subir PDF · <span id="pdf-prod-nom">No seleccionado</span>
+            <div class="upload-zone text-xs" id="zone-pdf-prod"
+              onclick="document.getElementById('inp-pdf-prod').click()"
+              ondragover="dragOver(event,'zone-pdf-prod')" ondragleave="dragLeave('zone-pdf-prod')"
+              ondrop="dropFile(event,'inp-pdf-prod','pdf-prod-nom',onPdfProduccionChange)">
+              📎 Arrastra aquí o toca para subir PDF de muestra
+              <span id="pdf-prod-nom" class="font-bold text-fb-dark block mt-1">No seleccionado</span>
             </div>
             <input type="file" id="inp-pdf-prod" accept=".pdf" style="display:none"
-              onchange="document.getElementById('pdf-prod-nom').textContent=this.files[0].name">
+              onchange="onPdfProduccionChange(this)">
+            <div class="alert-warn text-xs mt-2" style="padding:8px 12px;">
+              ⚠️ <strong>Recuerda:</strong> Gmail no permite adjuntar archivos automaticamente. El link de Drive aparecera en el correo. Adjunta el PDF manualmente antes de enviar.
+            </div>
+            <div class="alert-warn text-xs mt-2" style="padding:8px 12px;">
+              ⚠️ <strong>Recuerda:</strong> Gmail no permite adjuntar archivos automáticamente. El link de Drive aparecerá en el correo. Adjunta el PDF manualmente antes de enviar.
+            </div>
           </div>
           <div class="flex items-center gap-3 mt-2">
             <input type="checkbox" id="chk-prod-ini" ${prodIniciada?'checked':''} onchange="toggleProduccionIniciada(this)"
@@ -1061,7 +1181,8 @@ function gmailAlta() {
 function gmailFactura() {
   const p = S.pedido; const ov = p.ovEpicor || '(pendiente OV)';
   const asunto = `FACTURA DE ANTICIPO OV — ${ov}`;
-  const body = `Buenos días,\n\nSolicito factura de anticipo. Adjunto CSF.\n\nPedido: ${p.id}\nOV: ${ov}\nCliente: ${p.razonSocial}\nRFC: ${p.rfc||'—'}\nRégimen: ${p.regimenFiscal||'—'}\nUso CFDI: ${p.usoCFDI||'—'}\nCorreo factura: ${p.correo||'—'}\nMonto sin IVA: (indicar monto)\nMétodo SAT: ${p.metodoPagoSAT||'—'}\nForma pago: ${p.formaPago||'—'}\n\nAsesor: ${S.asesor.nombre} (${S.asesor.codigo})\n\nSaludos,`;
+  const montoAnticipo = document.getElementById('inp-monto-anticipo')?.value || '(indicar monto)';
+  const body = `Buenos días,\n\nSolicito factura de anticipo. Adjunto CSF.\n\nPedido: ${p.id}\nOV: ${ov}\nCliente: ${p.razonSocial}\nRFC: ${p.rfc||'—'}\nRégimen: ${p.regimenFiscal||'—'}\nUso CFDI: ${p.usoCFDI||'—'}\nCorreo factura: ${p.correo||'—'}\nMonto sin IVA: $${montoAnticipo} MXN\nMétodo SAT: ${p.metodoPagoSAT||'—'}\nForma pago: ${p.formaPago||'—'}\n\nAsesor: ${S.asesor.nombre} (${S.asesor.codigo})\n\nSaludos,`;
   window.open(`https://mail.google.com/mail/?view=cm&to=${enc(CORREOS.fac)}&su=${enc(asunto)}&body=${enc(body)}`,'_blank');
   marcarPaso('fac-anticipo');
 }
@@ -1105,7 +1226,7 @@ function gmailProduccion() {
   const prods = (p.productos||[]).map(pr =>
     `${(pr.sku||'').padEnd(10)}|  ${String(pr.cantActual||pr.cantOriginal||0).padStart(3)}  | ${pr.descripcion||''}`).join('\n');
   const asunto = `PRODUCCIÓN OV ${ov} — ${p.nombreComercial||p.razonSocial}`;
-  const body = `Buenos días equipo,\n\nSolicito ingreso a cola de producción.\n\n${'─'.repeat(30)}\nIDENTIFICACIÓN\n${'─'.repeat(30)}\nOV EPICOR: ${ov}\nFolio: ${p.id}\nFecha: ${new Date().toLocaleDateString('es-MX')}\nFecha límite: ${p.fechaLimite||'—'}\n\n${'─'.repeat(30)}\nCLIENTE\n${'─'.repeat(30)}\n${p.nombreComercial||p.razonSocial}\nContacto: ${p.nombreContacto}\nTel: ${p.telefono} · Correo: ${p.correo||'—'}\n\n${'─'.repeat(30)}\nPRODUCTOS\n${'─'.repeat(30)}\nSKU       | CANT  | DESCRIPCIÓN\n----------+-------+------------------\n${prods}\n\n${'─'.repeat(30)}\nDISEÑO\n${'─'.repeat(30)}\nGrabado: ${p.grabado||'No'} · Nombres individuales: ${p.nombresPorVaso||'No'}\nDiseño aprobado: ${S.pasos['diseno-aprobado']?.ok?'Sí':'Pendiente'}\nCarpeta OneDrive: ${od}\n(PDF de muestra adjunto)\n\n${'─'.repeat(30)}\nENTREGA\n${'─'.repeat(30)}\nTipo: ${p.tipoEntrega||'—'}\n${p.tipoEntrega==='Pick Up en instalaciones'?'El cliente pasará a recoger en instalaciones.':'Dirección: '+dir}\nComentarios: ${p.comentarios||'—'}\n\nAsesor: ${S.asesor.nombre} (${S.asesor.codigo})\n\nSaludos,`;
+  const body = `Buenos días equipo,\n\nSolicito ingreso a cola de producción.\n\n${'─'.repeat(30)}\nIDENTIFICACIÓN\n${'─'.repeat(30)}\nOV EPICOR: ${ov}\nFolio: ${p.id}\nFecha: ${new Date().toLocaleDateString('es-MX')}\nFecha límite: ${p.fechaLimite||'—'}\n\n${'─'.repeat(30)}\nCLIENTE\n${'─'.repeat(30)}\n${p.nombreComercial||p.razonSocial}\nContacto: ${p.nombreContacto}\nTel: ${p.telefono} · Correo: ${p.correo||'—'}\n\n${'─'.repeat(30)}\nPRODUCTOS\n${'─'.repeat(30)}\nSKU       | CANT  | DESCRIPCIÓN\n----------+-------+------------------\n${prods}\n\n${'─'.repeat(30)}\nDISEÑO\n${'─'.repeat(30)}\nGrabado: ${p.grabado||'No'} · Nombres individuales: ${p.nombresIndividuales||p.nombresPorVaso||'No'}\nDiseño aprobado: ${S.pasos['diseno-aprobado']?.ok?'Sí':'Pendiente'}\nCarpeta OneDrive: ${od}\nLink CSF en Drive: ${p.urlCSF||'No disponible'}\n(Adjuntar PDF de muestra manualmente en Gmail)\n\n${'─'.repeat(30)}\nENTREGA\n${'─'.repeat(30)}\nTipo: ${p.tipoEntrega||'—'}\n${p.tipoEntrega==='Pick Up en instalaciones'?'El cliente pasará a recoger en instalaciones.':'Dirección: '+dir}\nComentarios: ${p.comentarios||'—'}\n\nAsesor: ${S.asesor.nombre} (${S.asesor.codigo})\n\nSaludos,`;
   window.open(`https://mail.google.com/mail/?view=cm&to=${enc(CORREOS.prod)}&su=${enc(asunto)}&body=${enc(body)}`,'_blank');
   if (od !== '(pendiente)') apiPost({ action:'guardarOneDrive', fbk:p.id, valor:od, quien:S.asesor.nombre });
   apiPost({ action:'cambiarEstado', fbk:p.id, estado:'En producción', quien:S.asesor.nombre });
@@ -1116,7 +1237,7 @@ function gmailProduccion() {
 function waEnvio() {
   const p = S.pedido;
   const tel = '52' + (p.telefono||'').replace(/\D/g,'');
-  const msg = `Hola ${p.nombreContacto||p.nombreComercial} 📦\n\n¡Tu pedido (${p.id}) está en camino! En breve recibirás la guía de rastreo.\n\nCualquier duda, estamos a tus órdenes. ¡Gracias por confiar en nosotros! 🎉`;
+  const msg = `Hola ${p.nombreContacto||p.nombreComercial}!\n\n¡Tu pedido (${p.id}) esta en camino! En breve recibiras la guia de rastreo.\n\nCualquier duda, estamos a tus ordenes. ¡Gracias por confiar en nosotros!`;
   window.open(`https://wa.me/${tel}?text=${enc(msg)}`,'_blank');
   apiPost({ action:'cambiarEstado', fbk:p.id, estado:'En camino', quien:S.asesor.nombre });
   S.pedido.estado = 'En camino';
@@ -1126,9 +1247,10 @@ function waEnvio() {
 function waPostventa() {
   const p = S.pedido;
   const tel = '52' + (p.telefono||'').replace(/\D/g,'');
-  const msg = `Hola ${p.nombreContacto||p.nombreComercial} 😊\n\n¡Esperamos que hayas recibido tu pedido en perfectas condiciones!\n\nNos encantaría saber tu opinión:\n• ¿Quedaste satisfecho con los productos?\n• ¿El proceso fue fácil?\n\nSi tienes fotos del resultado, ¡nos encantaría verlas! Etiquétanos en Instagram @fbdrinkware o en Facebook como FB DRINKWARE. 📸\n\n¡Gracias por ser parte de la familia FB Drinkware! 🙌`;
+  const msg = `Hola ${p.nombreContacto||p.nombreComercial}!\n\n¡Esperamos que hayas recibido tu pedido en perfectas condiciones!\n\nNos encantaria saber tu opinion:\n- ¿Quedaste satisfecho con los productos?\n- ¿El proceso fue facil?\n\nSi tienes fotos del resultado, ¡nos encantaria verlas! Etiquetanos en Instagram @fbdrinkware o en Facebook como FB DRINKWARE.\n\n¡Gracias por ser parte de la familia FB Drinkware!`;
   window.open(`https://wa.me/${tel}?text=${enc(msg)}`,'_blank');
   marcarPaso('postventa');
+  // Post-venta completed - pedido moves out of pendientes on next refresh
 }
 
 // ════════════════════════════════
@@ -1137,11 +1259,13 @@ function waPostventa() {
 async function guardarOV() {
   const ov = document.getElementById('inp-ov').value.trim();
   if (!ov) return showToast('Escribe el número de OV','error');
+  showLoading('Guardando OV...');
   await apiPost({ action:'guardarOV', fbk:S.pedido.id, ov, quien:S.asesor.nombre });
   S.pedido.ovEpicor = ov;
   guardarSession();
   document.getElementById('ov-ok').style.display='block';
   document.getElementById('ov-ok').textContent = '✅ OV guardada: ' + ov;
+  hideLoading();
   renderPasos();
   showToast('OV guardada ✅');
 }
@@ -1260,9 +1384,11 @@ function abrirModalCancelar() {
 async function confirmarCancelacion() {
   const motivo = document.getElementById('inp-motivo-cancel').value.trim();
   if (!motivo) return showToast('El motivo es obligatorio','error');
+  showLoading('Cancelando pedido...');
   await apiPost({ action:'cancelarPedido', fbk:S.pedido.id, motivo, quien:S.asesor.nombre });
   S.pedido.estado = 'Cancelado';
   cerrarModal('modal-cancelar');
+  hideLoading();
   waCancelacion(motivo);
   renderSeguimiento();
   showToast('Pedido cancelado');
@@ -1271,7 +1397,7 @@ async function confirmarCancelacion() {
 function waCancelacion(motivo) {
   const p = S.pedido;
   const tel = '52' + (p.telefono||'').replace(/\D/g,'');
-  const msg = `Hola ${p.nombreContacto||p.nombreComercial},\n\nLamentamos informarte que tu pedido (${p.id}) ha sido cancelado.\n\nMotivo: ${motivo}\n\nSi tienes alguna duda o deseas hacer un nuevo pedido, con gusto te atendemos.\n\nGracias por tu comprensión. 🙏\n\n— Equipo FB Drinkware`;
+  const msg = `Hola ${p.nombreContacto||p.nombreComercial},\n\nLamentamos informarte que tu pedido (${p.id}) ha sido cancelado.\n\nMotivo: ${motivo}\n\nSi tienes alguna duda o deseas hacer un nuevo pedido, con gusto te atendemos.\n\nGracias por tu comprension.\n\n— Equipo FB Drinkware`;
   window.open(`https://wa.me/${tel}?text=${enc(msg)}`,'_blank');
 }
 
@@ -1361,6 +1487,33 @@ async function apiPost(payload) {
   } catch(e) { return { ok:false, error:e.toString() }; }
 }
 
+// apiPost that returns response data (used for operations needing a response like subirCSF)
+async function apiPostWithData(payload) {
+  try {
+    // Use GET with action + encoded payload to avoid CORS preflight
+    const url = new URL(SCRIPT_URL);
+    url.searchParams.set('action', payload.action);
+    // For large payloads (CSF base64), use no-cors POST and return placeholder
+    const r = await fetch(SCRIPT_URL + '?action=' + payload.action, {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain' },
+      body: JSON.stringify(payload)
+    });
+    if (r.ok) {
+      const data = await r.json();
+      return data;
+    }
+    return { ok:false };
+  } catch(e) {
+    // Fallback: fire-and-forget, return ok without url
+    try {
+      fetch(SCRIPT_URL, { method:'POST', mode:'no-cors',
+        headers:{'Content-Type':'application/json'}, body:JSON.stringify(payload) });
+    } catch(e2) {}
+    return { ok:true, url:null };
+  }
+}
+
 function fileToBase64(file) {
   return new Promise((res,rej) => {
     const r = new FileReader();
@@ -1368,6 +1521,80 @@ function fileToBase64(file) {
     r.onerror = rej;
     r.readAsDataURL(file);
   });
+}
+
+// Loading overlay helpers
+function showLoading(msg) {
+  document.getElementById('loading-msg').textContent = msg || 'Procesando...';
+  document.getElementById('loading-overlay').classList.add('show');
+  document.querySelectorAll('.btn-primary,.btn-action').forEach(b => b.disabled = true);
+}
+function hideLoading() {
+  document.getElementById('loading-overlay').classList.remove('show');
+  document.querySelectorAll('.btn-primary,.btn-action').forEach(b => b.disabled = false);
+}
+
+// Drag & drop helpers
+function dragOver(e, zoneId) {
+  e.preventDefault();
+  document.getElementById(zoneId).classList.add('drag-over');
+}
+function dragLeave(zoneId) {
+  document.getElementById(zoneId).classList.remove('drag-over');
+}
+function dropFile(e, inputId, previewId, callback) {
+  e.preventDefault();
+  const zoneId = e.currentTarget.id;
+  if (zoneId) document.getElementById(zoneId).classList.remove('drag-over');
+  const file = e.dataTransfer?.files?.[0];
+  if (!file) return;
+  const input = document.getElementById(inputId);
+  const dt = new DataTransfer();
+  dt.items.add(file);
+  input.files = dt.files;
+  if (callback) callback(input);
+}
+function onPdfProduccionChange(input) {
+  if (input.files[0]) {
+    document.getElementById('pdf-prod-nom').textContent = input.files[0].name;
+    S.pdfProduccion = input.files[0];
+  }
+}
+
+// Shipping cost helpers
+function toggleEnvioLinea() {
+  const div = document.getElementById('envio-linea');
+  const btn = document.getElementById('btn-toggle-envio');
+  if (div.style.display === 'none') {
+    div.style.display = 'block';
+    btn.textContent = '− Quitar';
+  } else {
+    div.style.display = 'none';
+    btn.textContent = '+ Agregar';
+    document.getElementById('f-costo-envio').value = '';
+  }
+}
+function actualizarTotalConEnvio() {
+  // Updates the total display in the products table when shipping is added
+  const costo = parseFloat(document.getElementById('f-costo-envio').value) || 0;
+  const baseSub = S.pedido?.subtotal || 0;
+  const total = baseSub + costo;
+  const totalEl = document.querySelector('#tabla-prods-cap .bg-fb-dark.text-right');
+  if (totalEl) totalEl.textContent = 'Total: $' + total.toLocaleString('es-MX',{minimumFractionDigits:2}) + ' MXN';
+}
+
+// Anticipo modal
+function abrirModalAnticipo() {
+  const subtotal = S.pedido?.subtotal || 0;
+  const costoEnvio = parseFloat(document.getElementById('f-costo-envio')?.value) || 0;
+  const totalConEnvio = subtotal + costoEnvio;
+  const montoSinIVA = (totalConEnvio / 1.16).toFixed(2);
+  document.getElementById('inp-monto-anticipo').value = montoSinIVA;
+  document.getElementById('modal-anticipo').style.display = 'flex';
+}
+function confirmarAnticipo() {
+  cerrarModal('modal-anticipo');
+  gmailFactura();
 }
 
 function guardarSession() {
