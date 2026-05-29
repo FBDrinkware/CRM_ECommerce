@@ -139,10 +139,14 @@
 <div class="screen active" id="tab-pendientes">
   <div class="card">
     <div class="flex items-center justify-between mb-3">
-      <div class="seccion mb-0">📋 Pedidos por etapa</div>
+      <div class="seccion mb-0">📋 Pedidos activos por etapa</div>
       <button onclick="cargarPendientes()" class="btn-outline text-xs">↺ Actualizar</button>
     </div>
     <div id="lista-por-etapa"><p class="text-xs text-fb-silver text-center py-4">Cargando...</p></div>
+  </div>
+  <div class="card" id="card-cerrados" style="display:none">
+    <div class="seccion">✅ Cerrados este mes (Entregados + Cancelados)</div>
+    <div id="lista-cerrados"></div>
   </div>
 </div>
 
@@ -223,7 +227,13 @@
 
     <!-- SECCIÓN: Dirección Fiscal -->
     <div class="card">
-      <div class="seccion">🧾 Dirección y datos fiscales</div>
+      <div class="flex items-center justify-between mb-4">
+        <div class="seccion mb-0">🧾 Dirección y datos fiscales</div>
+        <label class="flex items-center gap-2 cursor-pointer">
+          <input type="checkbox" id="chk-publico-general" onchange="togglePublicoGeneral(this)">
+          <span class="text-xs font-bold text-fb-mid">No requiere factura<br><span class="font-normal text-fb-silver">Público en General</span></span>
+        </label>
+      </div>
       <div class="campo mb-3"><label>Domicilio fiscal</label><input type="text" id="f-dom-fiscal" placeholder="Calle, Núm., Colonia"></div>
       <div class="grid grid-cols-3 gap-3 mb-3">
         <div class="campo"><label>Ciudad</label><input type="text" id="f-ciudad-fiscal" placeholder="Cancún"></div>
@@ -231,8 +241,41 @@
         <div class="campo"><label>C.P.</label><input type="text" id="f-cp-fiscal" placeholder="77500"></div>
       </div>
       <div class="grid grid-cols-2 gap-3 mb-3">
-        <div class="campo"><label>Régimen fiscal</label><input type="text" id="f-regimen" placeholder="601 - General de Ley"></div>
-        <div class="campo"><label>Uso del CFDI</label><input type="text" id="f-cfdi" placeholder="G03 - Gastos en general"></div>
+        <div class="campo"><label>Régimen fiscal</label><select id="f-regimen">
+          <option value="">Selecciona...</option>
+          <option value="601 - Régimen General de Ley Personas Morales">601 - Régimen General de Ley Personas Morales</option>
+          <option value="602 - Régimen Simplificado de Ley Personas Morales">602 - Régimen Simplificado de Ley Personas Morales</option>
+          <option value="603 - Personas Morales con Fines No Lucrativos">603 - Personas Morales con Fines No Lucrativos</option>
+          <option value="604 - Régimen de Pequeños Contribuyentes">604 - Régimen de Pequeños Contribuyentes</option>
+          <option value="605 - Régimen de Sueldos y Salarios">605 - Régimen de Sueldos y Salarios</option>
+          <option value="606 - Régimen de Arrendamiento">606 - Régimen de Arrendamiento</option>
+          <option value="607 - Régimen de Enajenación o Adquisición de Bienes">607 - Régimen de Enajenación o Adquisición de Bienes</option>
+          <option value="608 - Régimen de los Demás Ingresos">608 - Régimen de los Demás Ingresos</option>
+          <option value="609 - Régimen de Consolidación">609 - Régimen de Consolidación</option>
+          <option value="610 - Régimen Residentes en el Extranjero">610 - Régimen Residentes en el Extranjero</option>
+          <option value="611 - Ingresos por Dividendos">611 - Ingresos por Dividendos</option>
+          <option value="612 - Personas Físicas con Actividades Empresariales">612 - Personas Físicas con Actividades Empresariales</option>
+          <option value="613 - Régimen Intermedio Personas Físicas">613 - Régimen Intermedio Personas Físicas</option>
+          <option value="614 - Ingresos por Intereses">614 - Ingresos por Intereses</option>
+          <option value="615 - Régimen de Obtención de Premios">615 - Régimen de Obtención de Premios</option>
+          <option value="616 - Sin Obligaciones Fiscales">616 - Sin Obligaciones Fiscales</option>
+          <option value="617 - PEMEX">617 - PEMEX</option>
+          <option value="618 - Régimen Simplificado Ley Personas Físicas">618 - Régimen Simplificado Ley Personas Físicas</option>
+          <option value="621 - Régimen de Incorporación Fiscal">621 - Régimen de Incorporación Fiscal</option>
+          <option value="622 - Actividades Agrícolas y Ganaderas PM">622 - Actividades Agrícolas y Ganaderas PM</option>
+          <option value="625 - Actividades Empresariales con Plataformas Tecnológicas">625 - Actividades Empresariales con Plataformas Tecnológicas</option>
+          <option value="626 - Régimen Simplificado de Confianza">626 - Régimen Simplificado de Confianza</option>
+        </select></div>
+        <div class="campo"><label>Uso del CFDI</label><select id="f-cfdi">
+          <option value="">Selecciona...</option>
+          <option value="G01 - Adquisición de mercancías">G01 - Adquisición de mercancías</option>
+          <option value="G02 - Devoluciones, descuentos o bonificaciones">G02 - Devoluciones, descuentos o bonificaciones</option>
+          <option value="G03 - Gastos en general">G03 - Gastos en general</option>
+          <option value="S01 - Sin efectos fiscales">S01 - Sin efectos fiscales</option>
+          <option value="CP01 - Pagos">CP01 - Pagos</option>
+          <option value="D04 - Donativos">D04 - Donativos</option>
+          <option value="I01 - Construcciones">I01 - Construcciones</option>
+        </select></div>
       </div>
       <div class="grid grid-cols-2 gap-3 mb-2">
         <div class="campo"><label>Método de pago SAT</label>
@@ -307,7 +350,10 @@
             <input type="number" id="f-costo-envio" placeholder="Ej: 250" min="0" step="0.01"
               oninput="actualizarTotalConEnvio()">
           </div>
-          <p class="text-[10px] text-fb-silver mt-1">Se agregará como línea "Gastos de Envío · [Cliente]" en la tabla de productos.</p>
+          <div class="flex gap-2 mt-2">
+            <button onclick="guardarEnvio()" class="btn-action btn-gmail text-xs">Guardar costo de envío</button>
+          </div>
+          <p class="text-[10px] text-fb-silver mt-1">Se guardará como línea separada en el pedido.</p>
         </div>
       </div>
       <div class="campo mt-3">
@@ -326,6 +372,7 @@
     </div>
 
     <div class="flex gap-3 mb-6">
+      <button onclick="volverSeguimiento()" class="btn-outline" style="width:auto;padding:11px 16px;">← Volver</button>
       <button class="btn-primary" onclick="guardarCaptura()">Guardar y pasar a seguimiento →</button>
     </div>
   </div>
@@ -394,7 +441,7 @@
   <div class="card">
     <div class="seccion">👑 Vista Administrador</div>
     <p class="text-xs text-fb-silver mb-4">Acceso completo a todos los pedidos y métricas del equipo.</p>
-    <a href="https://docs.google.com/spreadsheets/d/15gIhiK1jpMcXM8uVCpq6nWZqVNcUO3O--e8acrOIe58/edit?gid=1071425301#gid=1071425301" target="_blank"
+    <a href="https://docs.google.com/spreadsheets/d/15gIhiK1jpMcXM8uVCpq6nWZqVNcUO3O--e8acrOIe58" target="_blank"
        class="btn-outline text-sm inline-block text-center w-full">📊 Abrir Sheets completo</a>
   </div>
 </div>
@@ -485,8 +532,8 @@
 // ════════════════════════════════
 // CONFIG — REEMPLAZAR DESPUÉS DEL SETUP
 // ════════════════════════════════
-const SCRIPT_URL  = 'https://script.google.com/macros/s/AKfycbz_wMxa9kcY0kuY6oF1ZyMsQENZbmb_WNOn9RbCPAJoXA2sDhWPPdtso4swp7wAzBvZ/exec';
-const TRELLO_URL  = 'https://trello.com/invite/b/6467f392487974ce37e8eb16/ATTI31280fea07ed3320280789b5a2ec87f00C8ED1C9/fb-drinkware';
+const SCRIPT_URL  = 'https://script.google.com/macros/s/AKfycbz3NTwMATDsfpWuIa9xGH6ndB6MMihkEiO7jn-SFeGi9OZpkR4yEY_zPyIfIKnpGUBu/exec';
+const TRELLO_URL  = 'https://trello.com/b/REEMPLAZAR';
 const CLIP_URL    = 'https://dashboard.clip.mx/';
 let CORREOS = { alta:'', fac:'', prod:'' };
 let DATOS_BANCO = 'Banco: BBVA\nCuenta: COMPLETAR\nCLABE: COMPLETAR\nBeneficiario: FB Drinkware S.A. de C.V.';
@@ -578,12 +625,14 @@ async function cargarConfig() {
 // PENDIENTES
 // ════════════════════════════════
 async function cargarPendientes() {
+  showLoading('Cargando pedidos...');
   document.getElementById('lista-por-etapa').innerHTML = '<p class="text-xs text-fb-silver text-center py-4">Cargando...</p>';
   const res = await apiGet('getPendientes', { correo: S.asesor.correo });
+  hideLoading();
   if (!res.ok) return;
-  // Combine all non-completed pedidos
   const todos = [...(res.porAtender||[]), ...(res.enProceso||[])];
   renderPendientesPorEtapa(todos);
+  renderCerrados(res.cerradosMes||[]);
 }
 
 function renderLista(lista, contenedorId, esPorAtender) {
@@ -685,7 +734,7 @@ async function cargarPedidoDesdeListado(fbk) {
   const res = await apiGet('getPedido', { fbk });
   if (!res.ok) { showToast('Error al cargar pedido', 'error'); return; }
   S.pedido = res.pedido;
-  S.pasos  = {};
+  S.pasos  = res.pedido.pasos || {};
   S.produccionIniciada = res.pedido.produccionIniciada === 'Sí';
   renderSeguimiento();
   showTab('tab-seguimiento', document.querySelectorAll('.tab-btn')[3]);
@@ -705,7 +754,7 @@ async function buscarPedido() {
     return;
   }
   S.pedido = res.pedido;
-  S.pasos  = {};
+  S.pasos  = res.pedido.pasos || {};
   S.produccionIniciada = res.pedido.produccionIniciada === 'Sí';
   div.innerHTML = `<div class="alert-ok">✅ Pedido encontrado: <strong>${res.pedido.nombreContacto || res.pedido.empresa}</strong>
     <br><button onclick="irCaptura()" class="btn-outline text-xs mt-2">Ir a captura de datos →</button>
@@ -716,8 +765,23 @@ async function buscarPedido() {
 // ════════════════════════════════
 // CAPTURA
 // ════════════════════════════════
+function resetFormulario() {
+  const ids = ['f-razon','f-comercial','f-rfc','f-contacto','f-telefono','f-correo',
+    'f-dom-fiscal','f-ciudad-fiscal','f-estado-fiscal','f-cp-fiscal',
+    'f-dir-envio','f-ciudad-envio','f-estado-envio','f-cp-envio','f-comentarios'];
+  ids.forEach(id => { const el = document.getElementById(id); if(el) el.value = ''; });
+  const sels = ['f-regimen','f-cfdi','f-metodo-sat','f-forma-pago','f-entrega','f-grabado','f-nombres'];
+  sels.forEach(id => { const el = document.getElementById(id); if(el) el.value = ''; });
+  document.getElementById('csf-preview').textContent = '';
+  document.getElementById('btn-extraer-csf').style.display = 'none';
+  S.csfFile = null;
+  const chk = document.getElementById('chk-publico-general');
+  if(chk) { chk.checked = false; togglePublicoGeneral(chk); }
+}
+
 function irCaptura() {
   if (!S.pedido) return;
+  resetFormulario();
   document.getElementById('captura-vacio').style.display = 'none';
   document.getElementById('bloque-captura').style.display = 'block';
   const p = S.pedido;
@@ -894,10 +958,15 @@ async function guardarCaptura() {
   await apiPost({ action:'guardarCliente', ...datos, fbkOrigen:S.pedido.id, creadoPor:S.asesor.nombre });
 
   Object.assign(S.pedido, datos);
-  // Preserve existing pasos - DO NOT reset them on edit
+  // Auto-mark alta BD interna paso
+  if (!S.pasos['alta']?.ok) {
+    const ts = new Date().toLocaleString('es-MX');
+    S.pasos['alta'] = { ok: true, ts };
+    apiPost({ action:'marcarPaso', fbk:S.pedido.id, paso:'alta', valor:true, ts, quien:S.asesor.nombre });
+  }
   guardarSession();
   hideLoading();
-  showToast('Datos guardados ✅');
+  showToast('Datos guardados');
   setTimeout(() => {
     renderSeguimiento();
     showTab('tab-seguimiento', document.querySelectorAll('.tab-btn')[3]);
@@ -954,9 +1023,11 @@ function renderSeguimiento() {
 
   // Chips
   const pendDir = !p.dirEnvio || p.dirEnvio === 'PENDIENTE';
+  const totalStr = p.subtotal ? '$' + Number(p.subtotal).toLocaleString('es-MX',{minimumFractionDigits:2}) + ' MXN' : '—';
   const chips = [
     ['Contacto', p.nombreContacto||p.empresa],
     ['Teléfono', p.telefono],
+    ['Total pedido', totalStr],
     ['Entrega',  p.tipoEntrega||'—'],
     ['Dirección envío', pendDir ? 'PENDIENTE' : p.dirEnvio, pendDir],
     ['Forma de pago', p.formaPago||'—'],
@@ -1002,12 +1073,24 @@ function renderPasos() {
       done: p.estado !== 'Cotización', icono:'💼',
       tooltip: p.estado === 'Cotización' ? 'Cambia el estado a Venta para desbloquear los siguientes pasos' : null,
     },
-    { id:'alta', num:'1', titulo:'Alta de cliente', icono:'📧',
-      sub: esNuevo ? 'Enviar correo de alta' : 'Cliente ya existe — no aplica',
+    { id:'alta', num:'✓', titulo:'Alta de cliente en BD interna', icono:'📧',
+      sub: esNuevo ? (ps['alta']?.ok ? 'Datos guardados en BD interna' : 'Se guardará al guardar los datos del cliente') : 'Cliente ya existe — no aplica',
       done: !esNuevo || !!(ps['alta']?.ok),
-      accion: esNuevo ? () => gmailAlta() : null,
-      accionLabel: esNuevo ? 'Abrir Gmail' : '✅ No aplica',
-      tooltip: esNuevo && !ps['alta']?.ok ? 'Enviar correo de alta al equipo de administración' : null,
+      accion: null, accionLabel: '',
+    },
+    { id:'alta-epicor', num:'1', titulo:'Alta de cliente en EPICOR', icono:'🏢',
+      sub: !esNuevo ? 'No aplica — cliente existente' : ps['alta-epicor']?.ok ? 'Alta confirmada en EPICOR' : 'Enviar correo y confirmar alta en sistema',
+      done: !esNuevo || !!(ps['alta-epicor']?.ok),
+      locked: esNuevo && !ps['alta']?.ok,
+      accion: null,
+      campoExtra: esNuevo && !ps['alta-epicor']?.ok ? `
+        <button onclick="gmailAlta()" class="btn-action btn-gmail mt-3 text-xs">Abrir Gmail (correo de alta)</button>
+        <div class="flex items-center gap-3 mt-3 p-3 bg-green-50 rounded-xl border border-green-200">
+          <input type="checkbox" id="chk-alta-epicor" onchange="marcarAltaEpicor(this)" class="w-4 h-4">
+          <label for="chk-alta-epicor" class="text-xs font-bold text-fb-dark cursor-pointer">
+            Alta confirmada en EPICOR — cliente listo para facturar
+          </label>
+        </div>` : '',
     },
     { id:'fac-anticipo', num:'2', titulo:'Factura de anticipo', icono:'🧾',
       sub: 'Solo si el cliente lo solicitó expresamente',
@@ -1098,6 +1181,12 @@ function renderPasos() {
       locked: p.estado !== 'Entregado',
       done: !!(ps['postventa']?.ok),
       accion: () => waPostventa(), accionLabel: 'WhatsApp',
+      campoExtra: ['Admin','Editor'].includes(S.asesor.jerarquia) ? `
+        <div class="mt-3 campo">
+          <label>Comentarios internos del pedido (devoluciones, incidencias, etc.)</label>
+          <textarea id="inp-comentario-post" class="comments-box" placeholder="Ej: Cliente solicitó cambio de color, se procesó devolución parcial...">${p.comentariosPost||''}</textarea>
+          <button onclick="guardarComentario()" class="btn-action btn-copy text-xs mt-2">Guardar comentario</button>
+        </div>` : p.comentariosPost ? `<div class="mt-2 text-xs text-fb-mid bg-fb-cream rounded-xl p-3">${p.comentariosPost}</div>` : '',
     },
   ];
 
@@ -1126,7 +1215,7 @@ function renderPasos() {
 }
 
 function ejecutarPaso(id) {
-  const acc = { alta:gmailAlta, 'fac-anticipo':gmailFactura, pago:gestionarPago,
+  const acc = { alta:()=>marcarPasoLocal('alta',true), 'fac-anticipo':abrirModalAnticipo, pago:gestionarPago,
     'diseno-trello':abrirTrello, 'diseno-aprobado':()=>marcarPaso('diseno-aprobado'),
     produccion:gmailProduccion, envio:waEnvio, postventa:waPostventa };
   if (acc[id]) acc[id]();
@@ -1190,19 +1279,23 @@ function gmailFactura() {
 function gestionarPago() {
   if (S.pedido.formaPago?.includes('TDC')) {
     window.open(CLIP_URL,'_blank');
-    marcarPaso('pago');
+    apiPost({ action:'cambiarEstado', fbk:S.pedido.id, estado:'Gestión de pago', quien:S.asesor.nombre });
+    S.pedido.estado = 'Gestión de pago';
+    marcarPasoLocal('pago', true);
   } else {
     if (!document.getElementById('modal-transf')) {
       const m = document.createElement('div');
       m.id = 'modal-transf';
       m.className = 'modal-overlay';
       m.innerHTML = `<div class="modal-box">
-        <h3 class="font-black text-fb-dark mb-4">🏦 Datos de transferencia</h3>
+        <h3 class="font-black text-fb-dark mb-4">Datos de transferencia</h3>
         <pre class="bg-fb-cream rounded-xl p-4 text-xs font-mono whitespace-pre-wrap">${DATOS_BANCO}</pre>
-        <button onclick="navigator.clipboard.writeText(\`${DATOS_BANCO}\`);showToast('Copiado ✅')"
-          class="btn-action btn-copy w-full justify-center mt-3">📋 Copiar datos</button>
-        <button onclick="document.getElementById('modal-transf').remove();marcarPaso('pago')"
-          class="btn-action btn-gmail w-full justify-center mt-2">✅ Marcar enviado al cliente</button>
+        <button onclick="navigator.clipboard.writeText(\`${DATOS_BANCO}\`);showToast('Datos copiados')"
+          class="btn-action btn-copy w-full justify-center mt-3">Copiar datos</button>
+        <button onclick="confirmarPagoTransf()"
+          class="btn-action btn-gmail w-full justify-center mt-2">Marcar enviado al cliente</button>
+        <button onclick="document.getElementById('modal-transf').style.display='none'"
+          class="w-full text-fb-silver text-xs font-bold mt-3 bg-transparent border-none cursor-pointer">Cerrar sin marcar</button>
       </div>`;
       document.body.appendChild(m);
     }
@@ -1339,9 +1432,11 @@ async function guardarModificaciones() {
       return;
     }
     if (i >= prodOrig.length) {
-      // Nueva línea
-      const precio = skuEl.options?.[skuEl.selectedIndex]?.dataset?.precio || 0;
-      cambios.push({ tipo:'agregar', sku:skuNuevo, desc, cant, precio:Number(precio) });
+      // Nueva línea - get desc from data-desc attribute
+      const selOpt = skuEl.options?.[skuEl.selectedIndex];
+      const precio = selOpt?.dataset?.precio || 0;
+      const descNueva = selOpt?.dataset?.desc || selOpt?.text?.split('—')[1]?.split('(')[0]?.trim() || '';
+      cambios.push({ tipo:'agregar', sku:skuNuevo, desc:descNueva, cant, precio:Number(precio) });
     } else if (skuNuevo !== prodOrig[i]?.sku || cant !== prodOrig[i]?.cantActual) {
       cambios.push({ tipo:'cambiar', skuOrig:prodOrig[i]?.sku, skuNuevo, cantNueva:cant, desc });
     }
@@ -1621,7 +1716,119 @@ function showToast(msg, tipo) {
 
 function abrirEdicion() {
   if (!S.pedido) return;
-  S.pedido && irCaptura();
+  irCaptura();
+}
+
+// Volver a seguimiento sin guardar
+function volverSeguimiento() {
+  if (S.pedido && S.pedido.razonSocial) {
+    renderSeguimiento();
+    showTab('tab-seguimiento', document.querySelectorAll('.tab-btn')[3]);
+  } else {
+    showTab('tab-busqueda', document.querySelectorAll('.tab-btn')[1]);
+  }
+}
+
+// Alta en EPICOR
+async function marcarAltaEpicor(el) {
+  if (!el.checked) return;
+  if (!confirm('Confirmar: el cliente ha sido dado de alta en EPICOR y esta listo para facturar.')) {
+    el.checked = false; return;
+  }
+  showLoading('Registrando alta en EPICOR...');
+  await apiPost({ action:'cambiarEstado', fbk:S.pedido.id, estado:'Alta de cliente', quien:S.asesor.nombre });
+  S.pedido.estado = 'Alta de cliente';
+  await marcarPasoLocal('alta-epicor', true);
+  hideLoading();
+  showToast('Alta en EPICOR confirmada');
+}
+
+// "No requiere factura" toggle
+function togglePublicoGeneral(el) {
+  const campos = ['f-dom-fiscal','f-ciudad-fiscal','f-estado-fiscal','f-cp-fiscal',
+                  'f-regimen','f-cfdi','f-metodo-sat'];
+  const camposPrinc = ['f-rfc','f-razon','f-comercial'];
+  if (el.checked) {
+    setVal('f-rfc', 'XAXX010101000');
+    setVal('f-razon', 'PUBLICO EN GENERAL');
+    setVal('f-comercial', 'PUBLICO EN GENERAL');
+    setVal('f-regimen', '616 - Sin Obligaciones Fiscales');
+    setVal('f-cfdi', 'S01 - Sin efectos fiscales');
+    [...campos, ...camposPrinc].forEach(id => {
+      const e = document.getElementById(id);
+      if (e) { e.disabled = true; e.style.opacity = '0.5'; }
+    });
+  } else {
+    [...campos, ...camposPrinc].forEach(id => {
+      const e = document.getElementById(id);
+      if (e) { e.disabled = false; e.style.opacity = '1'; }
+    });
+  }
+}
+
+// Confirmar pago por transferencia
+async function confirmarPagoTransf() {
+  document.getElementById('modal-transf').style.display = 'none';
+  showLoading('Registrando pago...');
+  await apiPost({ action:'cambiarEstado', fbk:S.pedido.id, estado:'Gestión de pago', quien:S.asesor.nombre });
+  S.pedido.estado = 'Gestión de pago';
+  await marcarPasoLocal('pago', true);
+  hideLoading();
+  showToast('Pago registrado');
+}
+
+// Save shipping cost
+async function guardarEnvio() {
+  const monto = parseFloat(document.getElementById('f-costo-envio')?.value) || 0;
+  if (!monto) return showToast('Ingresa el monto del envío', 'error');
+  if (!S.pedido?.id) return showToast('No hay pedido activo', 'error');
+  showLoading('Guardando costo de envío...');
+  const res = await apiPostWithData({ action:'agregarEnvio', fbk:S.pedido.id,
+    monto, nombreCliente: S.pedido.nombreComercial || S.pedido.razonSocial || S.pedido.nombreContacto,
+    quien: S.asesor.nombre });
+  hideLoading();
+  if (res && res.ok) {
+    showToast('Costo de envío guardado');
+    // Reload pedido to show new line
+    const fresh = await apiGet('getPedido', { fbk: S.pedido.id });
+    if (fresh.ok) { S.pedido = fresh.pedido; S.pasos = fresh.pedido.pasos || {}; }
+    guardarSession();
+  } else {
+    showToast('Error al guardar envío', 'error');
+  }
+}
+
+// Save post-venta comment
+async function guardarComentario() {
+  const texto = document.getElementById('inp-comentario-post')?.value?.trim();
+  if (!texto) return showToast('Escribe un comentario', 'error');
+  if (!S.pedido?.id) return;
+  showLoading('Guardando comentario...');
+  await apiPost({ action:'guardarComentario', fbk:S.pedido.id, comentario:texto, quien:S.asesor.nombre });
+  S.pedido.comentariosPost = texto;
+  hideLoading();
+  showToast('Comentario guardado');
+}
+
+// Render cerrados del mes
+function renderCerrados(lista) {
+  const card = document.getElementById('card-cerrados');
+  const div  = document.getElementById('lista-cerrados');
+  if (!lista || !lista.length) { card.style.display = 'none'; return; }
+  card.style.display = 'block';
+  div.innerHTML = lista.map(p => {
+    const badgeCls = badgeEstado(p.estado);
+    return `<div class="pendiente-card" onclick="cargarPedidoDesdeListado('${p.id}')">
+      <div class="flex items-start justify-between gap-2">
+        <div>
+          <div class="font-mono text-[10px] text-fb-silver">${p.id}</div>
+          <div class="font-bold text-fb-dark text-sm">${p.empresa||p.contacto}</div>
+          <div class="text-xs text-fb-mid">${p.contacto} · ${p.asesorCodigo}</div>
+        </div>
+        <span class="badge ${badgeCls} text-[10px]">${p.estado}</span>
+      </div>
+    </div>`;
+  }).join('');
 }
 </script>
 </body>
