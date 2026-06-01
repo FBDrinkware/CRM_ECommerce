@@ -79,6 +79,26 @@
 .upload-zone.drag-over{border-color:#184273;background:#EBF2FA}
 .seccion-pendiente{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;padding:8px 0 6px;color:#566876;display:flex;align-items:center;gap:6px;margin-top:12px;border-top:1px solid #e5e7eb}
 .seccion-pendiente:first-child{margin-top:0;border-top:none}
+/* ── CHECKLIST PRIMER CONTACTO ── */
+.pc-acordeon-btn{width:100%;background:none;border:none;cursor:pointer;padding:0;text-align:left}
+.pc-acordeon-btn:hover .pc-header{background:#EBF2FA;border-radius:12px}
+.pc-header{display:flex;align-items:center;justify-content:space-between;padding:10px 12px;border-radius:12px;transition:background .15s}
+.pc-chevron{transition:transform .25s;flex-shrink:0;color:#566876}
+.pc-chevron.open{transform:rotate(180deg)}
+.pc-body{overflow:hidden;max-height:0;transition:max-height .3s ease}
+.pc-body.open{max-height:9999px}
+.chk-item{display:flex;align-items:flex-start;gap:10px;padding:8px 10px;border-radius:10px;transition:background .12s;cursor:pointer}
+.chk-item:hover{background:#f8f9fa}
+.chk-item input[type=checkbox]{margin-top:1px;width:16px;height:16px;accent-color:#184273;flex-shrink:0;cursor:pointer}
+.chk-item label{font-size:12px;color:#184273;font-weight:600;cursor:pointer;line-height:1.4}
+.chk-item label span.chk-sub{display:block;font-size:10px;color:#566876;font-weight:400;margin-top:1px}
+.chk-item.done label{color:#16a34a}
+.chk-item.done label span.chk-sub{color:#4ade80}
+.chk-progress{height:4px;background:#e5e7eb;border-radius:4px;overflow:hidden;margin:8px 0 4px}
+.chk-progress-bar{height:100%;background:#184273;border-radius:4px;transition:width .3s}
+.btn-wa-contacto{display:flex;align-items:center;gap:8px;width:100%;padding:11px 16px;background:#16a34a;color:#fff;border:none;border-radius:12px;font-size:13px;font-weight:700;cursor:pointer;transition:all .15s;margin-top:12px;justify-content:center}
+.btn-wa-contacto:hover{background:#15803d}
+.btn-wa-contacto:active{transform:scale(.98)}
 </style>
 </head>
 <body class="pb-28">
@@ -206,6 +226,29 @@
       </div>
       <div class="grid grid-cols-2 gap-2 mb-3" id="chips-pedido"></div>
       <div id="tabla-prods-cap" class="text-xs rounded-xl overflow-hidden border border-fb-light"></div>
+    </div>
+
+    <!-- ── CHECKLIST PRIMER CONTACTO (Captura) ── -->
+    <div class="card" id="pc-card-cap" style="display:none">
+      <button class="pc-acordeon-btn" onclick="togglePC('cap')">
+        <div class="pc-header">
+          <div>
+            <div class="seccion mb-0" style="border:none;padding-bottom:0">📋 Primer Contacto</div>
+            <div class="text-xs text-fb-silver mt-0.5" id="pc-label-cap">Revisa qué datos tienes antes de escribirle al cliente</div>
+          </div>
+          <svg class="pc-chevron" id="pc-chevron-cap" xmlns="http://www.w3.org/2000/svg" width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7"/></svg>
+        </div>
+      </button>
+      <div class="pc-body" id="pc-body-cap">
+        <div class="px-1 pt-2 pb-1">
+          <div class="chk-progress"><div class="chk-progress-bar" id="pc-bar-cap" style="width:0%"></div></div>
+          <div id="pc-checks-cap" class="space-y-0.5 mb-1"></div>
+          <button class="btn-wa-contacto" onclick="abrirWaPrimerContacto()">
+            <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" fill="currentColor" viewBox="0 0 24 24"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/></svg>
+            Escribir al cliente por WhatsApp
+          </button>
+        </div>
+      </div>
     </div>
 
     <!-- SECCIÓN: Datos del cliente -->
@@ -412,6 +455,29 @@
       </div>
     </div>
 
+    <!-- ── CHECKLIST PRIMER CONTACTO (Seguimiento) ── -->
+    <div class="card" id="pc-card-seg" style="display:none">
+      <button class="pc-acordeon-btn" onclick="togglePC('seg')">
+        <div class="pc-header">
+          <div>
+            <div class="seccion mb-0" style="border:none;padding-bottom:0">📋 Primer Contacto</div>
+            <div class="text-xs text-fb-silver mt-0.5" id="pc-label-seg">Revisa qué datos tienes antes de escribirle al cliente</div>
+          </div>
+          <svg class="pc-chevron" id="pc-chevron-seg" xmlns="http://www.w3.org/2000/svg" width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7"/></svg>
+        </div>
+      </button>
+      <div class="pc-body" id="pc-body-seg">
+        <div class="px-1 pt-2 pb-1">
+          <div class="chk-progress"><div class="chk-progress-bar" id="pc-bar-seg" style="width:0%"></div></div>
+          <div id="pc-checks-seg" class="space-y-0.5 mb-1"></div>
+          <button class="btn-wa-contacto" onclick="abrirWaPrimerContacto()">
+            <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" fill="currentColor" viewBox="0 0 24 24"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/></svg>
+            Escribir al cliente por WhatsApp
+          </button>
+        </div>
+      </div>
+    </div>
+
     <!-- OV EPICOR -->
     <div class="card">
       <div class="seccion">🔢 OV EPICOR</div>
@@ -532,7 +598,7 @@
 // ════════════════════════════════
 // CONFIG — REEMPLAZAR DESPUÉS DEL SETUP
 // ════════════════════════════════
-const SCRIPT_URL  = 'https://script.google.com/macros/s/AKfycbz3NTwMATDsfpWuIa9xGH6ndB6MMihkEiO7jn-SFeGi9OZpkR4yEY_zPyIfIKnpGUBu/exec';
+const SCRIPT_URL  = 'https://script.google.com/macros/s/AKfycbz_wMxa9kcY0kuY6oF1ZyMsQENZbmb_WNOn9RbCPAJoXA2sDhWPPdtso4swp7wAzBvZ/exec';
 const TRELLO_URL  = 'https://trello.com/b/6467f392487974ce37e8eb16';
 const CLIP_URL    = 'https://dashboard.clip.mx/';
 let CORREOS = { alta:'', fac:'', prod:'' };
@@ -875,6 +941,8 @@ function irCaptura() {
   // Buscar duplicados
   if (p.telefono) buscarDuplicados(p.telefono);
 
+  renderPrimerContacto('cap');
+
   showTab('tab-captura', document.querySelectorAll('.tab-btn')[2]);
   window.scrollTo({top:0,behavior:'smooth'});
 }
@@ -1099,6 +1167,7 @@ function renderSeguimiento() {
   document.getElementById('btn-mod-prods').style.display = puedeEditar && p.estado !== 'Entregado' ? 'block' : 'none';
 
   renderPasos();
+  renderPrimerContacto('seg');
 }
 
 function renderPasos() {
@@ -1909,6 +1978,256 @@ function renderCerrados(lista) {
     </div>`;
   }).join('');
 }
+
+// ════════════════════════════════════════════════════════
+// CHECKLIST PRIMER CONTACTO
+// ════════════════════════════════════════════════════════
+
+// Estado local de checks (solo visual, no persiste en Sheets)
+let PC_STATE = {};
+
+// Definición de los 11 checks — lógica de auto-marcado
+function getPCChecks(p) {
+  if (!p) return [];
+  const esFB = (v) => !!v && v.toString().trim() !== '' && v.toString().trim() !== '—';
+  const esSi = (v) => v && v.toString().trim().toLowerCase() === 'sí';
+
+  // Datos fiscales: todas las cols del bloque C no opcionales
+  const datFisc = esFB(p.razonSocial) && esFB(p.domFiscal) && esFB(p.ciudadFiscal) &&
+                  esFB(p.estadoFiscal) && esFB(p.cpFiscal) && esFB(p.regimenFiscal) &&
+                  esFB(p.usoCFDI) && esFB(p.metodoPagoSAT) && esFB(p.formaPago) &&
+                  esFB(p.dirEnvio) && p.dirEnvio !== 'PENDIENTE' &&
+                  esFB(p.ciudadEnvio) && esFB(p.estadoEnvio) &&
+                  esFB(p.cpEnvio) && esFB(p.tipoEntrega);
+
+  const grabadoSi = esSi(p.grabado) || esSi(p.grabadoPedido);
+  const nombresSi = esSi(p.nombresIndividuales) || esSi(p.nombresPorVaso);
+  const facturaSi = esFB(p.rfcPedido) || esFB(p.rfc);
+
+  return [
+    {
+      key: 'nombre',
+      label: 'Nombre del contacto',
+      sub: p.nombreContacto || '—',
+      auto: esFB(p.nombreContacto),
+    },
+    {
+      key: 'telefono',
+      label: 'Teléfono',
+      sub: p.telefono || '—',
+      auto: esFB(p.telefono),
+    },
+    {
+      key: 'correo',
+      label: 'Correo electrónico',
+      sub: p.correo || p.correoCliente || '—',
+      auto: esFB(p.correo || p.correoCliente),
+    },
+    {
+      key: 'factura',
+      label: '¿Requiere factura?',
+      sub: facturaSi ? 'Sí — RFC: ' + (p.rfcPedido || p.rfc) : 'Sin RFC registrado',
+      auto: facturaSi || (p.razonSocial === 'PUBLICO EN GENERAL'),
+      pregunta: facturaSi,
+    },
+    {
+      key: 'dat-fiscales',
+      label: 'Datos fiscales completos',
+      sub: datFisc ? 'Bloque C completo' : 'Faltan campos',
+      auto: datFisc,
+    },
+    {
+      key: 'dir-envio',
+      label: 'Dirección de envío',
+      sub: (!p.dirEnvio || p.dirEnvio === 'PENDIENTE') ? 'Pendiente' : p.dirEnvio,
+      auto: esFB(p.dirEnvio) && p.dirEnvio !== 'PENDIENTE',
+    },
+    {
+      key: 'cp',
+      label: 'Código Postal',
+      sub: p.cpEnvio || p.cpPedido || '—',
+      auto: esFB(p.cpEnvio || p.cpPedido),
+    },
+    {
+      key: 'forma-pago',
+      label: 'Forma de pago',
+      sub: p.formaPago || p.formaPagoPedido || '—',
+      auto: esFB(p.formaPago || p.formaPagoPedido),
+    },
+    {
+      key: 'fecha',
+      label: 'Fecha que lo necesita',
+      sub: p.fechaLimite || '—',
+      auto: esFB(p.fechaLimite),
+    },
+    {
+      key: 'grabado',
+      label: '¿Requiere grabado?',
+      sub: grabadoSi ? 'Sí — confirmar diseño/logo' : (esFB(p.grabado) ? 'No' : 'Sin respuesta'),
+      auto: esFB(p.grabado || p.grabadoPedido),
+      pregunta: grabadoSi,
+    },
+    {
+      key: 'nombres',
+      label: '¿Nombres individuales?',
+      sub: nombresSi ? 'Sí — solicitar lista de nombres' : (esFB(p.nombresPorVaso || p.nombresIndividuales) ? 'No' : 'Sin respuesta'),
+      auto: esFB(p.nombresPorVaso || p.nombresIndividuales),
+      pregunta: nombresSi,
+    },
+  ];
+}
+
+function renderPrimerContacto(contexto) {
+  // contexto = 'seg' o 'cap'
+  const p = S.pedido;
+  if (!p) return;
+
+  // Solo mostrar a Admin y Editor
+  const puedeVer = ['Admin','Editor'].includes(S.asesor?.jerarquia);
+  const card = document.getElementById(`pc-card-${contexto}`);
+  if (!card) return;
+  if (!puedeVer) { card.style.display = 'none'; return; }
+  card.style.display = 'block';
+
+  const checks = getPCChecks(p);
+  const fbkKey = p.id + '_' + contexto;
+  // Inicializar estado si no existe
+  if (!PC_STATE[fbkKey]) {
+    PC_STATE[fbkKey] = {};
+    checks.forEach(c => { PC_STATE[fbkKey][c.key] = c.auto; });
+  }
+
+  const total    = checks.length;
+  const marcados = checks.filter(c => PC_STATE[fbkKey][c.key]).length;
+  const pct      = Math.round((marcados / total) * 100);
+
+  // Actualizar barra y label
+  const bar = document.getElementById(`pc-bar-${contexto}`);
+  if (bar) bar.style.width = pct + '%';
+  const lbl = document.getElementById(`pc-label-${contexto}`);
+  if (lbl) lbl.textContent = `${marcados}/${total} datos confirmados`;
+
+  const cont = document.getElementById(`pc-checks-${contexto}`);
+  if (!cont) return;
+  cont.innerHTML = checks.map(c => {
+    const marcado = PC_STATE[fbkKey][c.key];
+    return `<label class="chk-item ${marcado ? 'done' : ''}">
+      <input type="checkbox" ${marcado ? 'checked' : ''}
+        onchange="togglePCCheck('${fbkKey}','${c.key}',this.checked,'${contexto}')">
+      <label>
+        ${c.label}
+        <span class="chk-sub">${c.sub}</span>
+      </label>
+    </label>`;
+  }).join('');
+}
+
+function togglePCCheck(fbkKey, clave, valor, contexto) {
+  if (!PC_STATE[fbkKey]) PC_STATE[fbkKey] = {};
+  PC_STATE[fbkKey][clave] = valor;
+  renderPrimerContacto(contexto);
+  // Sincronizar la otra vista si está activa
+  const otro = contexto === 'seg' ? 'cap' : 'seg';
+  PC_STATE[fbkKey.replace('_'+contexto, '_'+otro)] = { ...PC_STATE[fbkKey] };
+  renderPrimerContacto(otro);
+}
+
+function togglePC(contexto) {
+  const body    = document.getElementById(`pc-body-${contexto}`);
+  const chevron = document.getElementById(`pc-chevron-${contexto}`);
+  if (!body) return;
+  const open = body.classList.contains('open');
+  body.classList.toggle('open', !open);
+  if (chevron) chevron.classList.toggle('open', !open);
+}
+
+function abrirWaPrimerContacto() {
+  const p = S.pedido;
+  if (!p) return;
+  const tel = '52' + (p.telefono || '').replace(/\D/g, '');
+  if (!tel || tel.length < 10) return showToast('No hay teléfono del cliente', 'error');
+
+  const nombre    = p.nombreContacto || p.nombreComercial || p.empresa || 'estimado/a';
+  const asesorNom = (S.asesor?.nombre || 'tu asesor').split(' ')[0];
+
+  // Productos del pedido
+  const prods = (p.productos || []).map(pr => `  • ${pr.cantActual || pr.cantOriginal} pzs de ${pr.descripcion}`).join('\n');
+
+  // Determinar checks del contexto activo
+  const contexto = document.getElementById('pc-card-seg')?.style.display !== 'none' &&
+                   document.getElementById('pc-body-seg')?.classList.contains('open') ? 'seg' : 'cap';
+  const fbkKey   = p.id + '_' + contexto;
+  const checks   = getPCChecks(p);
+  const estado   = PC_STATE[fbkKey] || {};
+
+  // Faltantes: los NO marcados
+  const faltantes = checks.filter(c => !estado[c.key]);
+  // Confirmaciones especiales
+  const grabadoSi = estado['grabado'] &&
+    (p.grabado?.toLowerCase() === 'sí' || p.grabadoPedido?.toLowerCase() === 'sí');
+  const nombresSi = estado['nombres'] &&
+    (p.nombresPorVaso?.toLowerCase() === 'sí' || p.nombresIndividuales?.toLowerCase() === 'sí');
+  const facturaSi = estado['factura'] && p.razonSocial !== 'PUBLICO EN GENERAL';
+
+  const todosCompletos = faltantes.length === 0;
+
+  let msg = '';
+
+  if (todosCompletos) {
+    // Todos los datos confirmados — mensaje de seguimiento
+    msg += `Hola ${nombre}, espero que estés muy bien. Soy ${asesorNom} de *FB Drinkware*.\n\n`;
+    msg += `Tengo registrada tu solicitud de cotización. Solo quería confirmar contigo:\n\n`;
+    msg += `*Tu pedido:*\n${prods}\n\n`;
+    msg += `¿Sigues adelante con tu pedido? Tengo todo listo para enviarte tu cotización personalizada. ¡Quedo al pendiente! 😊`;
+  } else {
+    // Hay datos faltantes — solicitar información
+    msg += `Hola ${nombre}, mucho gusto. Soy ${asesorNom} de *FB Drinkware*. `;
+    msg += `¡Qué gusto saber de ti! Vi que te interesaron estos productos:\n\n`;
+    msg += `${prods}\n\n`;
+    msg += `¡Excelente elección! Para prepararte una cotización a tu medida, `;
+    msg += `me ayudarías con unos datos rápidos:\n\n`;
+
+    faltantes.forEach(c => {
+      switch(c.key) {
+        case 'correo':        msg += `📧 ¿Me podrías compartir tu correo electrónico?\n`; break;
+        case 'factura':       msg += `🧾 ¿Vas a requerir factura?\n`; break;
+        case 'dat-fiscales':  msg += `📄 En caso de facturar, ¿me podrías enviar tu Constancia de Situación Fiscal (CSF)?\n`; break;
+        case 'dir-envio':     msg += `🚚 ¿A qué dirección te enviamos el pedido?\n`; break;
+        case 'cp':            msg += `📮 ¿Cuál es tu Código Postal?\n`; break;
+        case 'forma-pago':    msg += `💳 ¿Cómo prefieres pagar? (transferencia, depósito o tarjeta)\n`; break;
+        case 'fecha':         msg += `📅 ¿Para cuándo necesitas tu pedido?\n`; break;
+        case 'grabado':       msg += `🎨 ¿Te gustaría personalizar los vasos con grabado?\n`; break;
+        case 'nombres':       msg += `✍️ ¿Quieres que cada vaso lleve un nombre individual?\n`; break;
+        case 'nombre':        msg += `👤 ¿Cuál es tu nombre completo?\n`; break;
+        case 'telefono':      msg += `📱 ¿Me podrías confirmar tu número de contacto?\n`; break;
+      }
+    });
+
+    // Preguntas especiales cuando ya confirmó Sí
+    if (grabadoSi || nombresSi) {
+      msg += `\n`;
+      if (grabadoSi) {
+        msg += `*Notamos que te gustaría personalización con grabado.* ¿Nos podrías compartir tu diseño o logo? `;
+        msg += `(Formato ideal: PDF vectorizado o AI, aunque también trabajamos con PNG de buena resolución). `;
+        msg += `¿Tienes ya un diseño en mente o te ayudamos con uno? 🎨\n`;
+      }
+      if (nombresSi) {
+        msg += `*Para los nombres individuales*, ¿me podrías enviar la lista con los nombres `;
+        msg += `exactamente como los quieres en cada vaso? ✍️\n`;
+      }
+    }
+
+    if (facturaSi) {
+      msg += `\n*Para tu factura*, te recuerdo que necesitamos tu CSF actualizada `;
+      msg += `(no mayor a 3 meses). Si ya la tienes, puedes adjuntarla aquí mismo. 📎\n`;
+    }
+
+    msg += `\n¡Con eso puedo prepararte tu cotización completa! 😊 Estoy a tus órdenes.`;
+  }
+
+  window.open(`https://wa.me/${tel}?text=${encodeURIComponent(msg)}`, '_blank');
+}
+
 </script>
 </body>
 </html>
