@@ -782,7 +782,7 @@ function renderPendientesPorEtapa(todos) {
       const montoNum = Number(p.subtotal) || 0;
       const montoStr = montoNum > 0
         ? '$' + montoNum.toLocaleString('es-MX', {minimumFractionDigits:0, maximumFractionDigits:0})
-        : '—';
+        : 'Sin Monto';
       return `<div class="pendiente-card" onclick="cargarPedidoDesdeListado('${p.id}')">
         <div class="flex items-start justify-between gap-2">
           <div>
