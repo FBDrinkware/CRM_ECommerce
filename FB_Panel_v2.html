@@ -767,14 +767,22 @@ function renderPendientesPorEtapa(todos) {
 
   let out = '';
   secciones.forEach(sec => {
-    const items = todos.filter(p => asignado[p.id] === sec.id);
+    let items = todos.filter(p => asignado[p.id] === sec.id);
     if (!items.length) return;
+    // Solo sección "Sin atender" (s1) se ordena por subtotal descendente
+    if (sec.id === 's1') {
+      items = [...items].sort((a, b) => (Number(b.subtotal) || 0) - (Number(a.subtotal) || 0));
+    }
     out += `<div class="seccion-pendiente" style="color:#184273">
       <span style="background:${sec.color};padding:2px 8px;border-radius:8px;font-size:10px;">${sec.icon} ${sec.label}</span>
       <span class="text-fb-silver font-normal ml-1">(${items.length})</span>
     </div>`;
     out += items.map(p => {
       const nombre = p.empresa || p.contacto || p.id;
+      const montoNum = Number(p.subtotal) || 0;
+      const montoStr = montoNum > 0
+        ? '$' + montoNum.toLocaleString('es-MX', {minimumFractionDigits:0, maximumFractionDigits:0})
+        : '—';
       return `<div class="pendiente-card" onclick="cargarPedidoDesdeListado('${p.id}')">
         <div class="flex items-start justify-between gap-2">
           <div>
@@ -782,7 +790,10 @@ function renderPendientesPorEtapa(todos) {
             <div class="font-bold text-fb-dark text-sm">${nombre}</div>
             <div class="text-xs text-fb-mid">${p.contacto||''} · ${p.asesorCodigo||''}</div>
           </div>
-          <span class="badge ${badgeEstado(p.estado)} text-[10px]">${p.estado}</span>
+          <div class="flex flex-col items-end gap-1">
+            <span class="badge ${badgeEstado(p.estado)} text-[10px]">${p.estado}</span>
+            <span class="font-mono text-[11px] font-bold text-fb-dark">${montoStr}</span>
+          </div>
         </div>
       </div>`;
     }).join('');
@@ -1434,16 +1445,101 @@ function abrirTrello() {
 }
 
 function gmailProduccion() {
+  // Abre el modal de confirmación antes de abrir Gmail
+  const p = S.pedido;
+  if (!p) return;
+
+  // Pre-llenar destinatario con nombre de contacto (editable)
+  const dest = document.getElementById('prod-destinatario');
+  if (dest) dest.value = p.nombreContacto || p.nombreComercial || '';
+
+  // Pre-llenar nota de facturación según si tiene RFC
+  const tieneFactura = !!(p.rfc || p.rfcPedido) &&
+    (p.razonSocial !== 'PUBLICO EN GENERAL') &&
+    (p.razonSocial !== 'Público en General');
+  const notaFact = document.getElementById('prod-nota-factura');
+  if (notaFact) {
+    notaFact.value = tieneFactura
+      ? `Equipo de Facturación, el cliente SÍ requiere factura. Favor de facturar con los datos fiscales enviados al RFC ${p.rfc||p.rfcPedido}, razón social: ${p.razonSocial||'—'}.`
+      : 'Equipo de Facturación, el cliente NO requiere factura para este pedido.';
+  }
+
+  // Limpiar comentarios de almacén
+  const comAlm = document.getElementById('prod-comentarios-almacen');
+  if (comAlm) comAlm.value = '';
+
+  document.getElementById('modal-produccion').style.display = 'flex';
+}
+
+function confirmarEnvioProduccion() {
   const p   = S.pedido;
   const ov  = p.ovEpicor || '(pendiente)';
   const od  = document.getElementById('inp-onedrive')?.value?.trim() || '(pendiente)';
+  const destinatario = document.getElementById('prod-destinatario')?.value?.trim() || p.nombreContacto || '—';
+  const comentAlmacen = document.getElementById('prod-comentarios-almacen')?.value?.trim() || '—';
+  const notaFactura = document.getElementById('prod-nota-factura')?.value?.trim() || '—';
+
   const dir = (!p.dirEnvio || p.dirEnvio === 'PENDIENTE')
     ? 'PENDIENTE — se enviará en respuesta a este correo'
     : `${p.dirEnvio}, ${p.ciudadEnvio||''}, ${p.estadoEnvio||''} C.P. ${p.cpEnvio||''}`;
   const prods = (p.productos||[]).map(pr =>
     `${(pr.sku||'').padEnd(10)}|  ${String(pr.cantActual||pr.cantOriginal||0).padStart(3)}  | ${pr.descripcion||''}`).join('\n');
   const asunto = `PRODUCCIÓN OV ${ov} — ${p.nombreComercial||p.razonSocial}`;
-  const body = `Buenos días equipo,\n\nSolicito ingreso a cola de producción.\n\n${'─'.repeat(30)}\nIDENTIFICACIÓN\n${'─'.repeat(30)}\nOV EPICOR: ${ov}\nFolio: ${p.id}\nFecha: ${new Date().toLocaleDateString('es-MX')}\nFecha límite: ${p.fechaLimite||'—'}\n\n${'─'.repeat(30)}\nCLIENTE\n${'─'.repeat(30)}\n${p.nombreComercial||p.razonSocial}\nContacto: ${p.nombreContacto}\nTel: ${p.telefono} · Correo: ${p.correo||'—'}\n\n${'─'.repeat(30)}\nPRODUCTOS\n${'─'.repeat(30)}\nSKU       | CANT  | DESCRIPCIÓN\n----------+-------+------------------\n${prods}\n\n${'─'.repeat(30)}\nDISEÑO\n${'─'.repeat(30)}\nGrabado: ${p.grabado||'No'} · Nombres individuales: ${p.nombresIndividuales||p.nombresPorVaso||'No'}\nDiseño aprobado: ${S.pasos['diseno-aprobado']?.ok?'Sí':'Pendiente'}\nCarpeta OneDrive: ${od}\nLink CSF en Drive: ${p.urlCSF||'No disponible'}\n(Adjuntar PDF de muestra manualmente en Gmail)\n\n${'─'.repeat(30)}\nENTREGA\n${'─'.repeat(30)}\nTipo: ${p.tipoEntrega||'—'}\n${p.tipoEntrega==='Pick Up en instalaciones'?'El cliente pasará a recoger en instalaciones.':'Dirección: '+dir}\nComentarios: ${p.comentarios||'—'}\n\nAsesor: ${S.asesor.nombre} (${S.asesor.codigo})\n\nSaludos,`;
+
+  const body =
+`Buenos días equipo,
+
+Solicito ingreso a cola de producción.
+
+${'─'.repeat(30)}
+IDENTIFICACIÓN
+${'─'.repeat(30)}
+OV EPICOR:    ${ov}
+Folio:        ${p.id}
+Fecha:        ${new Date().toLocaleDateString('es-MX')}
+Fecha límite: ${p.fechaLimite||'—'}
+
+${'─'.repeat(30)}
+CLIENTE
+${'─'.repeat(30)}
+${p.nombreComercial||p.razonSocial}
+Contacto:  ${p.nombreContacto}
+Tel:       ${p.telefono} · Correo: ${p.correo||'—'}
+
+${'─'.repeat(30)}
+PRODUCTOS
+${'─'.repeat(30)}
+SKU       | CANT  | DESCRIPCIÓN
+----------+-------+------------------
+${prods}
+
+${'─'.repeat(30)}
+DISEÑO
+${'─'.repeat(30)}
+Grabado: ${p.grabado||'No'} · Nombres individuales: ${p.nombresIndividuales||p.nombresPorVaso||'No'}
+Diseño aprobado: ${S.pasos['diseno-aprobado']?.ok?'Sí':'Pendiente'}
+Carpeta OneDrive: ${od}
+Link CSF en Drive: ${p.urlCSF||'No disponible'}
+(Adjuntar PDF de muestra manualmente en Gmail)
+
+${'─'.repeat(30)}
+ENTREGA
+${'─'.repeat(30)}
+Tipo:          ${p.tipoEntrega||'—'}
+Destinatario:  ${destinatario}
+${p.tipoEntrega==='Pick Up en instalaciones'?'El cliente pasará a recoger en instalaciones.':'Dirección: '+dir}
+Comentarios para almacén: ${comentAlmacen}
+
+${'─'.repeat(30)}
+FACTURACIÓN
+${'─'.repeat(30)}
+${notaFactura}
+
+Asesor: ${S.asesor.nombre} (${S.asesor.codigo})
+
+Saludos,`;
+
+  cerrarModal('modal-produccion');
   window.open(`https://mail.google.com/mail/?view=cm&to=${enc(CORREOS.prod)}&su=${enc(asunto)}&body=${enc(body)}`,'_blank');
   if (od !== '(pendiente)') apiPost({ action:'guardarOneDrive', fbk:p.id, valor:od, quien:S.asesor.nombre });
   apiPost({ action:'cambiarEstado', fbk:p.id, estado:'En producción', quien:S.asesor.nombre });
@@ -2144,8 +2240,8 @@ function togglePC(contexto) {
 function abrirWaPrimerContacto() {
   const p = S.pedido;
   if (!p) return;
-  const tel = '52' + (p.telefono || '').replace(/\D/g, '');
-  if (!tel || tel.length < 10) return showToast('No hay teléfono del cliente', 'error');
+  const tel = '52' + String(p.telefono || '').replace(/\D/g, '');
+  if (!tel || tel.length < 12) return showToast('No hay teléfono del cliente', 'error');
 
   const nombre    = p.nombreContacto || p.nombreComercial || p.empresa || 'estimado/a';
   const asesorNom = (S.asesor?.nombre || 'tu asesor').split(' ')[0];
@@ -2229,5 +2325,34 @@ function abrirWaPrimerContacto() {
 }
 
 </script>
+
+<!-- ── MODAL PRODUCCIÓN ── -->
+<div class="modal-overlay" id="modal-produccion" style="display:none">
+  <div class="modal" style="max-width:480px;width:95%">
+    <div class="font-bold text-fb-dark text-base mb-1">📦 Solicitar producción</div>
+    <p class="text-xs text-fb-silver mb-4">Revisa los datos antes de abrir Gmail. Puedes editarlos.</p>
+
+    <div class="campo mb-3">
+      <label class="text-xs font-bold text-fb-mid uppercase tracking-wide">Destinatario (quien recibe el paquete)</label>
+      <input type="text" id="prod-destinatario" class="mt-1" placeholder="Nombre de quien recibe">
+    </div>
+
+    <div class="campo mb-3">
+      <label class="text-xs font-bold text-fb-mid uppercase tracking-wide">Comentarios para almacén</label>
+      <textarea id="prod-comentarios-almacen" rows="3" class="mt-1 w-full rounded-xl border border-fb-light p-3 text-sm resize-none focus:outline-none focus:border-fb-dark" placeholder="Instrucciones especiales de empaque, urgencia, etc. (opcional)"></textarea>
+    </div>
+
+    <div class="campo mb-4">
+      <label class="text-xs font-bold text-fb-mid uppercase tracking-wide">Nota para facturación</label>
+      <textarea id="prod-nota-factura" rows="3" class="mt-1 w-full rounded-xl border border-fb-light p-3 text-sm resize-none focus:outline-none focus:border-fb-dark" placeholder="Instrucción para el equipo de facturación..."></textarea>
+    </div>
+
+    <div class="flex gap-2 mt-2">
+      <button onclick="cerrarModal('modal-produccion')" class="btn-outline flex-1">Cancelar</button>
+      <button onclick="confirmarEnvioProduccion()" class="btn-primary flex-1">Abrir Gmail ✉️</button>
+    </div>
+  </div>
+</div>
+
 </body>
 </html>
