@@ -444,6 +444,7 @@
         <div class="flex flex-col items-end gap-2">
           <span id="seg-estado-badge" class="badge"></span>
           <span id="seg-asesor-badge" class="badge badge-asesor text-xs"></span>
+          <span id="seg-externo-badge" class="text-[10px] font-bold text-red-600 bg-red-50 border border-red-200 px-2 py-0.5 rounded-full" style="display:none">⚠ Asesor externo</span>
           <div class="flex gap-2">
             <button onclick="abrirEdicion()" class="btn-outline text-xs">✏️ Editar datos</button>
             <button onclick="abrirModificarProductos()" id="btn-mod-prods" class="btn-outline text-xs">📦 Productos</button>
@@ -802,6 +803,7 @@ function renderPendientesPorEtapa(todos) {
           </div>
           <div class="flex flex-col items-end gap-1">
             <span class="badge ${badgeEstado(p.estado)} text-[10px]">${p.estado}</span>
+            ${p.esExterno ? '<span class="text-[10px] font-bold text-red-600 bg-red-50 border border-red-200 px-2 py-0.5 rounded-full">⚠ Asesor externo</span>' : ''}
             <span class="font-mono text-[11px] font-bold text-fb-dark">${montoStr}</span>
           </div>
         </div>
@@ -900,9 +902,14 @@ function irCaptura() {
   document.getElementById('badge-tipo-cap').className = 'badge ' + badgeEstado(p.estado);
 
   // Chips resumen
-  const chips = [['ID',p.id],['Contacto',p.nombreContacto],['Teléfono',p.telefono],['Asesor',p.asesorCodigo]];
-  document.getElementById('chips-pedido').innerHTML = chips.map(([l,v]) =>
-    `<div class="chip"><div class="lbl">${l}</div><div class="val">${v||'—'}</div></div>`).join('');
+  const asesorCapNom = (p.asesorNombreReal || '').split(' ')[0];
+  const asesorCapLabel = p.asesorCodigo + (asesorCapNom ? ' · ' + asesorCapNom : '');
+  const chips = [['ID',p.id],['Contacto',p.nombreContacto],['Teléfono',p.telefono],['Asesor',asesorCapLabel]];
+  const externoChip = p.esExterno
+    ? `<div class="chip" style="border-color:#fca5a5;background:#fff1f2"><div class="lbl" style="color:#dc2626">Canal</div><div class="val" style="color:#dc2626;font-weight:700">⚠ Asesor externo</div></div>`
+    : '';
+  document.getElementById('chips-pedido').innerHTML =
+    chips.map(([l,v]) => `<div class="chip"><div class="lbl">${l}</div><div class="val">${v||'—'}</div></div>`).join('') + externoChip;
 
   // Tabla de productos
   const prods = p.productos || [];
@@ -1084,6 +1091,14 @@ async function guardarCaptura() {
     S.pasos['alta'] = { ok: true, ts };
     apiPost({ action:'marcarPaso', fbk:S.pedido.id, paso:'alta', valor:true, ts, quien:S.asesor.nombre });
   }
+  // Si el asesor marcó "No requiere factura", persistir el paso ahora al guardar
+  if (S._facAnticipoPendiente === 'noAplica' && !S.pasos['fac-anticipo']?.ok) {
+    const ts = new Date().toLocaleString('es-MX');
+    S.pasos['fac-anticipo'] = { ok: true, ts, noAplica: true };
+    apiPost({ action:'marcarPaso', fbk:S.pedido.id, paso:'fac-anticipo',
+      valor:true, ts, quien:S.asesor?.nombre||'Panel' });
+    S._facAnticipoPendiente = null;
+  }
   guardarSession();
   hideLoading();
   showToast('Datos guardados');
@@ -1146,7 +1161,11 @@ function renderSeguimiento() {
   document.getElementById('seg-meta').textContent = (p.tipoEntrega||'') + ' · ' + (p.formaPago||'') + (p.fechaLimite ? ' · Límite: '+p.fechaLimite : '');
   document.getElementById('seg-estado-badge').textContent = p.estado;
   document.getElementById('seg-estado-badge').className = 'badge ' + badgeEstado(p.estado);
-  document.getElementById('seg-asesor-badge').textContent = (p.asesorCodigo||S.asesor.codigo) + ' · ' + (p.asesorNombre||S.asesor.nombre).split(' ')[0];
+  const asesorDisplayNom = (p.asesorNombreReal || p.asesorNombre || S.asesor.nombre).split(' ')[0];
+  document.getElementById('seg-asesor-badge').textContent = (p.asesorCodigo||S.asesor.codigo) + ' · ' + asesorDisplayNom;
+  // Etiqueta Asesor externo
+  const extBadgeSeg = document.getElementById('seg-externo-badge');
+  if (extBadgeSeg) extBadgeSeg.style.display = p.esExterno ? 'inline-flex' : 'none';
 
   if (p.ovEpicor) {
     document.getElementById('inp-ov').value = p.ovEpicor;
@@ -1230,7 +1249,7 @@ function renderPasos() {
     { id:'fac-anticipo', num:'2', titulo:'Factura de anticipo', icono:'🧾',
       sub: ps['fac-anticipo']?.noAplica ? 'No aplica — Público en General' :
            ps['fac-anticipo']?.ok ? 'Correo enviado' : 'Solo si el cliente lo solicitó expresamente',
-      done: !!(ps['fac-anticipo']?.ok),
+      done: !!(ps['fac-anticipo']?.ok) || !!(ps['fac-anticipo']?.noAplica),
       accion: ps['fac-anticipo']?.noAplica ? null : () => abrirModalAnticipo(),
       accionLabel: 'Abrir Gmail',
       tooltip: !ps['fac-anticipo']?.ok && !ps['fac-anticipo']?.noAplica ? 'Recuerda: primero intenta convencer al cliente de esperar la factura de producto' : null,
@@ -1992,21 +2011,21 @@ function togglePublicoGeneral(el) {
       const e = document.getElementById(id);
       if (e) { e.disabled = true; e.style.opacity = '0.5'; }
     });
-    // Mark factura anticipo as not applicable
-    if (S.pedido?.id && !S.pasos['fac-anticipo']?.ok) {
-      const ts = new Date().toLocaleString('es-MX');
-      S.pasos['fac-anticipo'] = { ok: true, ts, noAplica: true };
-      apiPost({ action:'marcarPaso', fbk:S.pedido.id, paso:'fac-anticipo',
-        valor:true, ts, quien:S.asesor?.nombre||'Panel' });
-    }
+    // Solo marcar visualmente — se persiste al guardar datos del cliente
+    S._facAnticipoPendiente = 'noAplica';
   } else {
     [...campos, ...camposPrinc].forEach(id => {
       const e = document.getElementById(id);
       if (e) { e.disabled = false; e.style.opacity = '1'; }
     });
-    // Unmark factura anticipo if it was marked as noAplica
+    // Limpiar flag temporal y paso si solo era noAplica
+    S._facAnticipoPendiente = null;
     if (S.pasos['fac-anticipo']?.noAplica) {
       delete S.pasos['fac-anticipo'];
+      if (S.pedido?.id) {
+        apiPost({ action:'marcarPaso', fbk:S.pedido.id, paso:'fac-anticipo',
+          valor:false, ts: new Date().toLocaleString('es-MX'), quien:S.asesor?.nombre||'Panel' });
+      }
     }
   }
 }
