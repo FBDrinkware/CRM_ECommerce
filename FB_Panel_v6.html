@@ -117,9 +117,14 @@
       <p class="text-xs text-fb-silver mt-1">Panel de Ventas v2</p>
     </div>
     <div id="login-estado" class="text-center">
-      <p class="text-sm text-fb-mid mb-4">Ingresa tu correo de Google autorizado</p>
+      <p class="text-sm text-fb-mid mb-4">Ingresa tus credenciales de acceso</p>
       <div class="campo mb-3"><label>Correo institucional</label>
         <input type="email" id="inp-correo-login" placeholder="tu.correo@francobolli.com.mx"
+          onkeydown="if(event.key==='Enter')document.getElementById('inp-pin-login').focus()">
+      </div>
+      <div class="campo mb-4"><label>PIN de acceso</label>
+        <input type="password" id="inp-pin-login" placeholder="••••••"
+          maxlength="6" inputmode="numeric"
           onkeydown="if(event.key==='Enter')iniciarSesion()">
       </div>
       <button onclick="iniciarSesion()" class="btn-primary">Ingresar →</button>
@@ -598,7 +603,7 @@
 // ════════════════════════════════
 // CONFIG — REEMPLAZAR DESPUÉS DEL SETUP
 // ════════════════════════════════
-const SCRIPT_URL  = 'https://script.google.com/macros/s/AKfycbzCugCj5h8W5Gfh7nlmvwXGzeenFdoqxyzbgZCOubGSFO9rHxEHkvggoJw36EF9Wa3M/exec';
+const SCRIPT_URL  = 'https://script.google.com/macros/s/AKfycbz3NTwMATDsfpWuIa9xGH6ndB6MMihkEiO7jn-SFeGi9OZpkR4yEY_zPyIfIKnpGUBu/exec';
 const TRELLO_URL  = 'https://trello.com/b/6467f392487974ce37e8eb16';
 const CLIP_URL    = 'https://dashboard.clip.mx/';
 let CORREOS = { alta:'', fac:'', prod:'' };
@@ -635,12 +640,17 @@ window.onload = async () => {
 // ════════════════════════════════
 async function iniciarSesion() {
   const correo = document.getElementById('inp-correo-login').value.trim();
-  if (!correo) return;
-  const res = await apiGet('autenticar', { correo });
+  const pin    = document.getElementById('inp-pin-login').value.trim();
+  if (!correo) { document.getElementById('inp-correo-login').focus(); return; }
+  if (!pin)    { document.getElementById('inp-pin-login').focus(); return; }
+  const res = await apiGet('autenticar', { correo, pin });
   if (!res.ok) {
     const el = document.getElementById('login-error');
-    el.textContent = 'Correo no autorizado. Contacta al administrador.';
+    el.textContent = res.error || 'Credenciales incorrectas. Contacta al administrador.';
     el.classList.remove('hidden');
+    // Limpiar PIN pero mantener correo
+    document.getElementById('inp-pin-login').value = '';
+    document.getElementById('inp-pin-login').focus();
     return;
   }
   S.asesor = res.asesor;
@@ -782,7 +792,7 @@ function renderPendientesPorEtapa(todos) {
       const montoNum = Number(p.subtotal) || 0;
       const montoStr = montoNum > 0
         ? '$' + montoNum.toLocaleString('es-MX', {minimumFractionDigits:0, maximumFractionDigits:0})
-        : 'Sin Monto';
+        : '—';
       return `<div class="pendiente-card" onclick="cargarPedidoDesdeListado('${p.id}')">
         <div class="flex items-start justify-between gap-2">
           <div>
@@ -1184,7 +1194,8 @@ function renderSeguimiento() {
 function renderPasos() {
   const p  = S.pedido;
   const ps = S.pasos || {};
-  const esNuevo    = !(p.razonSocial);
+  // esNuevo: usa el campo del backend; si no viene, lo deriva de razonSocial
+  const esNuevo = p.esNuevo === 'Sí' || p.esNuevo === true || !(p.razonSocial && p.razonSocial.toString().trim());
   const tieneOV    = !!(p.ovEpicor);
   const deseño     = p.grabado === 'Sí' || p.nombresPorVaso === 'Sí' || p.nombresIndividuales === 'Sí';
   const trelloDone = !!(ps['diseno-trello']?.ok);
