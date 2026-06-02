@@ -414,8 +414,8 @@
     <div class="card">
       <div class="seccion">👤 Asesor responsable</div>
       <div class="grid grid-cols-2 gap-3">
-        <div class="campo"><label>Código</label><input type="text" id="f-asesor-cod" class="prefilled" readonly></div>
-        <div class="campo"><label>Nombre</label><input type="text" id="f-asesor-nom" class="prefilled" readonly></div>
+    <div class="campo"><label>Código</label><input type="text" id="f-asesor-cod"></div>
+    <div class="campo"><label>Nombre</label><input type="text" id="f-asesor-nom"></div>
       </div>
     </div>
 
@@ -955,6 +955,9 @@ function irCaptura() {
   setVal('f-cp-envio', p.cpEnvio || p.cpPedido);
   setVal('f-entrega', p.tipoEntrega);
   setVal('f-comentarios', p.comentarios);
+  // Asesor del pedido — editable, pre-llenado con el asesor original
+  setVal('f-asesor-cod', p.asesorCodigo || S.asesor.codigo);
+  setVal('f-asesor-nom', p.asesorNombreReal || p.asesorNombre || S.asesor.nombre);
   // Grabado y nombres — siempre
   const grabadoVal = p.grabado || p.grabadoPedido || '';
   const nombresVal = p.nombresIndividuales || p.nombresPorVaso || '';
@@ -1130,7 +1133,8 @@ function recogerDatos() {
     grabado:        v('f-grabado') || S.pedido?.grabado || S.pedido?.grabadoPedido || 'No',
     nombresIndividuales: v('f-nombres') || S.pedido?.nombresIndividuales || S.pedido?.nombresPorVaso || 'No',
     comentarios:    v('f-comentarios'),
-    asesorNombre:   S.asesor.nombre, asesorCodigo: S.asesor.codigo,
+    asesorNombre:   v('f-asesor-nom') || S.asesor.nombre,
+    asesorCodigo:   v('f-asesor-cod') || S.asesor.codigo,
   };
 }
 
