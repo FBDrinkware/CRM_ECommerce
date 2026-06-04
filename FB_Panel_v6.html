@@ -946,11 +946,11 @@ function irCaptura() {
     </div>`;
 
   // Pre-llenar con datos del catálogo (Pedido Completo)
-  setVal('f-rfc',       p.rfcPedido);
+  setVal('f-rfc',       p.rfc       || p.rfcPedido);
   setVal('f-contacto',  p.nombreContacto);
   setVal('f-telefono',  p.telefono);
-  setVal('f-correo',    p.correoCliente);
-  setVal('f-comercial', p.empresa);
+  setVal('f-correo',    p.correo    || p.correoCliente);
+  setVal('f-comercial', p.nombreComercial || p.empresa);
   setVal('f-ciudad-envio', p.ciudadPedido);
   setVal('f-cp-envio',     p.cpPedido);
   if (p.formaPagoPedido) setVal('f-forma-pago', p.formaPagoPedido);
