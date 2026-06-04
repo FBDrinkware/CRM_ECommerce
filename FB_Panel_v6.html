@@ -461,6 +461,13 @@
       </div>
     </div>
 
+    <!-- ── TABLA DE PRODUCTOS (Seguimiento) ── -->
+    <div class="card" id="seg-prods-card" style="display:none">
+      <div class="seccion">📦 Productos</div>
+      <div id="seg-alerta-stock" style="display:none;margin-bottom:10px;background:#fff7ed;border:1px solid #fed7aa;border-radius:10px;padding:9px 13px;font-size:12px;font-weight:700;color:#c2410c"></div>
+      <div id="seg-tabla-prods" class="text-xs rounded-xl overflow-hidden border border-fb-light"></div>
+    </div>
+
     <!-- ── CHECKLIST PRIMER CONTACTO (Seguimiento) ── -->
     <div class="card" id="pc-card-seg" style="display:none">
       <button class="pc-acordeon-btn" onclick="togglePC('seg')">
@@ -631,8 +638,7 @@ window.onload = async () => {
   if (saved) {
     S.asesor = JSON.parse(saved);
     mostrarApp();
-    await cargarConfig();
-    await cargarPendientes();
+    await Promise.all([cargarConfig(), cargarPendientes()]);
   }
 };
 
@@ -657,8 +663,7 @@ async function iniciarSesion() {
   S.asesor = res.asesor;
   localStorage.setItem('fb_asesor_v2', JSON.stringify(S.asesor));
   mostrarApp();
-  await cargarConfig();
-  await cargarPendientes();
+  await Promise.all([cargarConfig(), cargarPendientes()]);
 }
 
 function mostrarApp() {
@@ -686,16 +691,19 @@ function cerrarSesion() {
 // CARGAR CONFIG
 // ════════════════════════════════
 async function cargarConfig() {
-  const res = await apiGet('getConfig');
-  if (!res.ok) return;
-  const c = res.config;
-  if (c.CORREOS_ALTA) CORREOS.alta = c.CORREOS_ALTA;
-  if (c.CORREOS_FAC)  CORREOS.fac  = c.CORREOS_FAC;
-  if (c.CORREOS_PROD) CORREOS.prod  = c.CORREOS_PROD;
-  if (c.DATOS_BANCO)  DATOS_BANCO   = c.DATOS_BANCO;
-  if (c.WHATSAPP_NUM) WHATSAPP_NUM  = c.WHATSAPP_NUM;
-  const prods = await apiGet('getProductos');
-  if (prods.ok) CATALOGO_PRODS = prods.productos;
+  const [resConfig, resProds] = await Promise.all([
+    apiGet('getConfig'),
+    apiGet('getProductos'),
+  ]);
+  if (resConfig.ok) {
+    const c = resConfig.config;
+    if (c.CORREOS_ALTA) CORREOS.alta = c.CORREOS_ALTA;
+    if (c.CORREOS_FAC)  CORREOS.fac  = c.CORREOS_FAC;
+    if (c.CORREOS_PROD) CORREOS.prod  = c.CORREOS_PROD;
+    if (c.DATOS_BANCO)  DATOS_BANCO   = c.DATOS_BANCO;
+    if (c.WHATSAPP_NUM) WHATSAPP_NUM  = c.WHATSAPP_NUM;
+  }
+  if (resProds.ok) CATALOGO_PRODS = resProds.productos;
 }
 
 // ════════════════════════════════
@@ -913,16 +921,26 @@ function irCaptura() {
 
   // Tabla de productos
   const prods = p.productos || [];
+  // Mapa SKU -> status para cruzar con el catálogo (ya en memoria, sin llamada extra)
+  const _skuStatus = {};
+  CATALOGO_PRODS.forEach(cp => { _skuStatus[cp.sku] = (cp.status||'').toLowerCase(); });
   document.getElementById('tabla-prods-cap').innerHTML =
     `<div class="bg-fb-dark text-white px-3 py-2 text-[10px] font-bold grid grid-cols-4 uppercase">
       <span>SKU</span><span class="col-span-2">Descripción</span><span class="text-right">Cant · $</span>
     </div>` +
-    prods.map((pr,i) => `
+    prods.map((pr,i) => {
+      const st = _skuStatus[pr.sku] || '';
+      const esUltimas = st.includes('ultimas') || st.includes('últimas');
+      const badgeUlt = esUltimas
+        ? `<span title="Stock limitado" style="display:inline-block;margin-left:5px;background:#ea580c;color:#fff;font-size:9px;font-weight:900;padding:1px 6px;border-radius:5px;text-transform:uppercase;vertical-align:middle;">⚠ Últimas</span>`
+        : '';
+      return `
       <div class="grid grid-cols-4 px-3 py-2 text-xs ${i%2===0?'':'bg-fb-cream'}">
         <span class="font-mono text-fb-mid">${pr.sku}</span>
-        <span class="col-span-2">${pr.descripcion}</span>
+        <span class="col-span-2">${pr.descripcion}${badgeUlt}</span>
         <span class="text-right font-bold">${pr.cantActual} · $${Number(pr.precioUnit).toFixed(2)}</span>
-      </div>`).join('') +
+      </div>`;
+    }).join('') +
     `<div class="bg-fb-dark text-white px-3 py-2 text-xs font-bold text-right">
       Total: $${Number(p.subtotal).toLocaleString('es-MX',{minimumFractionDigits:2})} MXN
     </div>`;
@@ -970,7 +988,7 @@ function irCaptura() {
   }
 
   // Buscar duplicados
-  if (p.telefono) buscarDuplicados(p.telefono);
+  if (p.telefono || p.rfcPedido) buscarDuplicados(p.telefono, p.rfcPedido);
 
   renderPrimerContacto('cap');
 
@@ -992,8 +1010,9 @@ function setVal(id, val) {
   }
 }
 
-async function buscarDuplicados(tel) {
-  const res = await apiGet('getCliente', { q: tel });
+async function buscarDuplicados(tel, rfc) {
+  const q = JSON.stringify({ tel: tel||'', rfc: rfc||'' });
+  const res = await apiGet('getCliente', { q });
   if (!res.ok || !res.clientes.length) return;
   const alerta = document.getElementById('alerta-dup');
   const lista  = document.getElementById('lista-dup');
@@ -1209,6 +1228,50 @@ function renderSeguimiento() {
   // Permisos de modificación
   const puedeEditar = ['Admin','Editor'].includes(S.asesor.jerarquia);
   document.getElementById('btn-mod-prods').style.display = puedeEditar && p.estado !== 'Entregado' ? 'block' : 'none';
+
+  // ── Tabla de productos con alerta de stock limitado ──
+  const prodsSeq = p.productos || [];
+  if (prodsSeq.length) {
+    document.getElementById('seg-prods-card').style.display = 'block';
+    // Cruzar SKUs del pedido contra CATALOGO_PRODS (ya en memoria, sin llamada extra)
+    const _skuStatusSeg = {};
+    CATALOGO_PRODS.forEach(cp => { _skuStatusSeg[cp.sku] = (cp.status||'').toLowerCase(); });
+    const afectados = prodsSeq.filter(pr => {
+      const st = _skuStatusSeg[pr.sku] || '';
+      return st.includes('ultimas') || st.includes('últimas');
+    });
+    // Banner de alerta
+    const alertaEl = document.getElementById('seg-alerta-stock');
+    if (afectados.length) {
+      const n = afectados.length;
+      alertaEl.style.display = 'block';
+      alertaEl.innerHTML = `⚠ ${n} SKU${n > 1 ? 's' : ''} con stock limitado · Favor de verificar disponibilidad de inventario con almacén.`;
+    } else {
+      alertaEl.style.display = 'none';
+    }
+    // Tabla de productos
+    document.getElementById('seg-tabla-prods').innerHTML =
+      `<div class="bg-fb-dark text-white px-3 py-2 text-[10px] font-bold grid grid-cols-4 uppercase">
+        <span>SKU</span><span class="col-span-2">Descripción</span><span class="text-right">Cant · $</span>
+      </div>` +
+      prodsSeq.map((pr, i) => {
+        const st = _skuStatusSeg[pr.sku] || '';
+        const esUltimas = st.includes('ultimas') || st.includes('últimas');
+        const badgeUlt = esUltimas
+          ? `<span style="display:inline-block;margin-left:5px;background:#ea580c;color:#fff;font-size:9px;font-weight:900;padding:1px 6px;border-radius:5px;text-transform:uppercase;vertical-align:middle;">⚠ Últimas</span>`
+          : '';
+        return `<div class="grid grid-cols-4 px-3 py-2 text-xs ${i % 2 === 0 ? '' : 'bg-fb-cream'}">
+          <span class="font-mono text-fb-mid">${pr.sku}</span>
+          <span class="col-span-2">${pr.descripcion}${badgeUlt}</span>
+          <span class="text-right font-bold">${pr.cantActual} · $${Number(pr.precioUnit).toFixed(2)}</span>
+        </div>`;
+      }).join('') +
+      `<div class="bg-fb-dark text-white px-3 py-2 text-xs font-bold text-right">
+        Total: $${Number(p.subtotal).toLocaleString('es-MX', {minimumFractionDigits:2})} MXN
+      </div>`;
+  } else {
+    document.getElementById('seg-prods-card').style.display = 'none';
+  }
 
   renderPasos();
   renderPrimerContacto('seg');
