@@ -613,7 +613,7 @@
 // ════════════════════════════════
 const SCRIPT_URL  = 'https://script.google.com/macros/s/AKfycbz3NTwMATDsfpWuIa9xGH6ndB6MMihkEiO7jn-SFeGi9OZpkR4yEY_zPyIfIKnpGUBu/exec';
 const TRELLO_URL  = 'https://trello.com/b/6467f392487974ce37e8eb16';
-const CLIP_URL    = 'https://dashboard.clip.mx/payments/paymentLink';
+const CLIP_URL    = 'https://dashboard.clip.mx/';
 let CORREOS = { alta:'', fac:'', prod:'' };
 let DATOS_BANCO = 'Banco: BBVA\nCuenta: COMPLETAR\nCLABE: COMPLETAR\nBeneficiario: FB Drinkware S.A. de C.V.';
 let WHATSAPP_NUM = '5219981951897';
@@ -750,29 +750,66 @@ function renderLista(lista, contenedorId, esPorAtender) {
 
 // Render pendientes grouped by stage - each pedido in ONE section only
 function renderPendientesPorEtapa(todos) {
+  const CERRADOS = ['Entregado','Cancelado'];
+  const requiereDiseno = p =>
+    p.grabado === 'Sí' || p.nombresIndividuales === 'Sí' || p.nombresPorVaso === 'Sí';
+  const disenoCubierto = p =>
+    !requiereDiseno(p) || p.pasos?.['diseno-aprobado']?.ok;
+
   const secciones = [
+    // s1 — Recién llegado, sin procesar
     { id:'s1', icon:'🔴', label:'Sin atender', color:'#fee2e2',
       filtro: p => p.estado === 'Cotización' },
-    { id:'s2', icon:'📧', label:'Alta de cliente pendiente', color:'#fef3c7',
-      filtro: p => p.estado !== 'Cotización' && !['Entregado','Cancelado'].includes(p.estado)
-        && p.pasos && !p.pasos['alta-epicor']?.ok },
-    { id:'s3', icon:'💳', label:'Gestión de pago pendiente', color:'#ede9fe',
-      filtro: p => p.estado !== 'Cotización' && !['Entregado','Cancelado'].includes(p.estado)
-        && p.pasos?.['alta-epicor']?.ok && !p.pasos?.['pago']?.ok },
-    { id:'s4', icon:'🎨', label:'Diseño pendiente de aprobación', color:'#fce7f3',
-      filtro: p => p.estado !== 'Cotización' && !['Entregado','Cancelado'].includes(p.estado)
+
+    // s2 — Ya es venta pero falta dar de alta en EPICOR
+    { id:'s2', icon:'📧', label:'Falta alta de cliente', color:'#fef3c7',
+      filtro: p => !CERRADOS.includes(p.estado) && p.estado !== 'Cotización'
+        && !p.pasos?.['alta-epicor']?.ok },
+
+    // s3 — Alta lista, esperando pago
+    { id:'s3', icon:'💳', label:'Falta pago', color:'#ede9fe',
+      filtro: p => !CERRADOS.includes(p.estado)
+        && p.pasos?.['alta-epicor']?.ok
+        && !p.pasos?.['pago']?.ok },
+
+    // s4 — Pagado, requiere diseño, pendiente aprobación del cliente
+    { id:'s4', icon:'🎨', label:'Falta aprobación de diseño', color:'#fce7f3',
+      filtro: p => !CERRADOS.includes(p.estado)
         && p.pasos?.['pago']?.ok
-        && (p.grabado==='Sí'||p.nombresIndividuales==='Sí'||p.nombresPorVaso==='Sí')
+        && requiereDiseno(p)
         && !p.pasos?.['diseno-aprobado']?.ok },
-    { id:'s5', icon:'📤', label:'Solicitud de producción pendiente', color:'#e0f2fe',
-      filtro: p => p.estado !== 'Cotización' && !['Entregado','Cancelado','En producción','En camino'].includes(p.estado)
-        && p.pasos?.['pago']?.ok && p.ovEpicor && !p.pasos?.['produccion']?.ok },
-    { id:'s6', icon:'🏭', label:'En producción', color:'#dbeafe',
+
+    // s5 — Pago ok + diseño cubierto, pero falta capturar OV en EPICOR
+    { id:'s5', icon:'🔢', label:'Falta OV EPICOR', color:'#ffedd5',
+      filtro: p => !CERRADOS.includes(p.estado)
+        && p.pasos?.['pago']?.ok
+        && disenoCubierto(p)
+        && !p.ovEpicor },
+
+    // s6 — Todo listo para producción, falta solicitarla
+    { id:'s6', icon:'📤', label:'Falta solicitar producción', color:'#e0f2fe',
+      filtro: p => !CERRADOS.includes(p.estado)
+        && !['En producción','En camino'].includes(p.estado)
+        && p.pasos?.['pago']?.ok
+        && disenoCubierto(p)
+        && p.ovEpicor
+        && !p.pasos?.['produccion']?.ok },
+
+    // s7 — En planta
+    { id:'s7', icon:'🏭', label:'En producción', color:'#dbeafe',
       filtro: p => p.estado === 'En producción' },
-    { id:'s7', icon:'📦', label:'En camino', color:'#d1fae5',
+
+    // s8 — Salió de producción, en tránsito al cliente
+    { id:'s8', icon:'📦', label:'En camino', color:'#d1fae5',
       filtro: p => p.estado === 'En camino' },
-    { id:'s8', icon:'⭐', label:'Post-venta pendiente', color:'#fef9c3',
+
+    // s9 — Entregado pero falta cerrar el ciclo post-venta
+    { id:'s9', icon:'⭐', label:'Post-venta pendiente', color:'#fef9c3',
       filtro: p => p.estado === 'Entregado' && !p.pasos?.['postventa']?.ok },
+
+    // s10 — Red de seguridad: cualquier pedido abierto no capturado por s1-s9
+    { id:'s10', icon:'⚙️', label:'En proceso', color:'#f1f5f9',
+      filtro: p => !CERRADOS.includes(p.estado) },
   ];
 
   const cont = document.getElementById('lista-por-etapa');
