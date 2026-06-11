@@ -372,7 +372,7 @@
       </div>
       <div class="grid grid-cols-2 gap-3 mb-3">
         <div class="campo"><label>Tipo de entrega *</label>
-          <select id="f-entrega"><option value="">Selecciona...</option>
+          <select id="f-entrega" onchange="toggleDireccionEnvio(this.value)"><option value="">Selecciona...</option>
             <option value="Envío a domicilio">Envío a domicilio</option>
             <option value="Pick Up en instalaciones">Pick Up en instalaciones</option>
             <option value="Logística propia FB">Logística propia FB</option>
@@ -500,6 +500,8 @@
         <button onclick="guardarOV()" class="bg-fb-dark text-white px-5 py-3 rounded-xl font-bold text-sm">Guardar</button>
       </div>
       <div id="ov-ok" class="text-xs text-green-600 font-bold mt-2" style="display:none"></div>
+      <button onclick="abrirModalDatosOV()"
+        class="btn-outline w-full mt-3 text-xs">📋 Ver datos para hacer OV en EPICOR</button>
     </div>
 
     <!-- Pasos del flujo -->
@@ -1009,6 +1011,7 @@ function irCaptura() {
   setVal('f-estado-envio', p.estadoEnvio);
   setVal('f-cp-envio', p.cpEnvio || p.cpPedido);
   setVal('f-entrega', p.tipoEntrega);
+  toggleDireccionEnvio(p.tipoEntrega || '');
   setVal('f-comentarios', p.comentarios);
   // Asesor del pedido — editable, pre-llenado con el asesor original
   setVal('f-asesor-cod', p.asesorCodigo || S.asesor.codigo);
@@ -1321,7 +1324,7 @@ function renderPasos() {
   const esNuevo = p.esNuevo === 'Sí' || p.esNuevo === true || !(p.razonSocial && p.razonSocial.toString().trim());
   const tieneOV    = !!(p.ovEpicor);
   const deseño     = p.grabado === 'Sí' || p.nombresPorVaso === 'Sí' || p.nombresIndividuales === 'Sí';
-  const trelloDone = !!(ps['diseno-trello']?.ok);
+  const disenoPedidoDone = !!(ps['diseno-gmail']?.ok);
   const disenoDone = !!(ps['diseno-aprobado']?.ok);
   const prodIniciada = S.produccionIniciada;
 
@@ -1364,20 +1367,20 @@ function renderPasos() {
       accion: () => gestionarPago(),
       accionLabel: p.formaPago?.includes('TDC') ? 'Abrir CLIP' : 'Ver datos',
     },
-    { id:'diseno-trello', num:'4a', titulo:'Abrir tarjeta Trello', icono:'📋',
-      sub: deseño ? 'Crear tarjeta para el diseñador' : 'No aplica — sin personalización',
-      done: !deseño || !!(ps['diseno-trello']?.ok),
+    { id:'diseno-gmail', num:'4a', titulo:'Solicitar diseño a Nelly', icono:'🎨',
+      sub: deseño ? 'Correo al diseñador con tabla de productos' : 'No aplica — sin personalización',
+      done: !deseño || !!(ps['diseno-gmail']?.ok),
       locked: !deseño,
-      accion: deseño ? () => abrirTrello() : null,
-      accionLabel: deseño ? 'Abrir Trello' : '— No aplica',
+      accion: deseño ? () => gmailDiseno() : null,
+      accionLabel: deseño ? 'Abrir Gmail' : '— No aplica',
     },
     { id:'diseno-aprobado', num:'4b', titulo:'Diseño aprobado por cliente', icono:'✅',
       sub: 'Marca cuando el cliente confirme el diseño',
       done: !deseño || !!(ps['diseno-aprobado']?.ok),
-      locked: !deseño || !trelloDone,
+      locked: !deseño || !ps['diseno-gmail']?.ok,
       accion: deseño ? () => marcarPaso('diseno-aprobado') : null,
       accionLabel: 'Marcar aprobado',
-      tooltip: deseño && !trelloDone ? 'Primero abre la tarjeta en Trello (paso 4a)' : null,
+      tooltip: deseño && !ps['diseno-gmail']?.ok ? 'Primero solicita el diseño a Nelly (paso 4a)' : null,
     },
     { id:'ov', num:'5', titulo:'OV en EPICOR', icono:'🔢',
       sub: tieneOV ? 'OV: ' + p.ovEpicor : 'Ingresa la OV en el campo de arriba',
@@ -1386,32 +1389,33 @@ function renderPasos() {
       tooltip: !tieneOV ? 'Genera la OV en EPICOR e ingrésala en el campo de arriba' : null,
     },
     { id:'produccion', num:'6', titulo:'Solicitar producción', icono:'🏭',
-      sub: 'Correo al equipo · Adjunta PDF del diseño',
+      sub: ps['produccion']?.ok ? 'Solicitud enviada' : 'Correo al equipo · Adjunta PDF del diseño',
       locked: !tieneOV || (deseño && !disenoDone),
       done: !!(ps['produccion']?.ok),
-      accion: () => gmailProduccion(),
-      accionLabel: 'Abrir Gmail',
-      tooltip: !tieneOV ? 'Necesitas la OV de EPICOR para solicitar producción' : (deseño && !disenoDone ? 'El diseño debe estar aprobado por el cliente (paso 4b)' : null),
+      accion: ps['produccion']?.ok ? null : () => gmailProduccion(),
+      accionLabel: ps['produccion']?.ok ? null : 'Abrir Gmail',
+      tooltip: ps['produccion']?.ok ? null : (!tieneOV ? 'Necesitas la OV de EPICOR para solicitar producción' : (deseño && !disenoDone ? 'El diseño debe estar aprobado por el cliente (paso 4b)' : null)),
       campoExtra: `
         <div class="mt-3 space-y-2">
           <div class="campo"><label>Link carpeta OneDrive</label>
-            <input type="text" id="inp-onedrive" placeholder="https://onedrive..." value="${p.urlOneDrive||''}"></div>
+            <input type="text" id="inp-onedrive" placeholder="https://onedrive..." value="${p.urlOneDrive||''}"
+              ${ps['produccion']?.ok ? 'disabled class="prefilled"' : ''}></div>
           <div class="campo"><label>PDF de muestra del diseño</label>
-            <div class="upload-zone text-xs" id="zone-pdf-prod"
-              onclick="document.getElementById('inp-pdf-prod').click()"
-              ondragover="dragOver(event,'zone-pdf-prod')" ondragleave="dragLeave('zone-pdf-prod')"
-              ondrop="dropFile(event,'inp-pdf-prod','pdf-prod-nom',onPdfProduccionChange)">
-              📎 Arrastra aquí o toca para subir PDF de muestra
+            <div class="upload-zone text-xs ${ps['produccion']?.ok ? 'opacity-40 pointer-events-none' : ''}"
+              id="zone-pdf-prod"
+              onclick="${ps['produccion']?.ok ? '' : "document.getElementById('inp-pdf-prod').click()"}"
+              ondragover="${ps['produccion']?.ok ? '' : "dragOver(event,'zone-pdf-prod')"}"
+              ondragleave="${ps['produccion']?.ok ? '' : "dragLeave('zone-pdf-prod')"}"
+              ondrop="${ps['produccion']?.ok ? '' : "dropFile(event,'inp-pdf-prod','pdf-prod-nom',onPdfProduccionChange)"}">
+              📎 ${ps['produccion']?.ok ? 'Producción ya solicitada — no se permiten nuevos archivos' : 'Arrastra aquí o toca para subir PDF de muestra'}
               <span id="pdf-prod-nom" class="font-bold text-fb-dark block mt-1">No seleccionado</span>
             </div>
             <input type="file" id="inp-pdf-prod" accept=".pdf" style="display:none"
-              onchange="onPdfProduccionChange(this)">
-            <div class="alert-warn text-xs mt-2" style="padding:8px 12px;">
-              ⚠️ <strong>Recuerda:</strong> Gmail no permite adjuntar archivos automaticamente. El link de Drive aparecera en el correo. Adjunta el PDF manualmente antes de enviar.
-            </div>
+              ${ps['produccion']?.ok ? 'disabled' : 'onchange="onPdfProduccionChange(this)"'}>
+            ${ps['produccion']?.ok ? '' : `
             <div class="alert-warn text-xs mt-2" style="padding:8px 12px;">
               ⚠️ <strong>Recuerda:</strong> Gmail no permite adjuntar archivos automáticamente. El link de Drive aparecerá en el correo. Adjunta el PDF manualmente antes de enviar.
-            </div>
+            </div>`}
           </div>
           <div class="flex items-center gap-3 mt-2">
             <input type="checkbox" id="chk-prod-ini" ${prodIniciada?'checked':''} onchange="toggleProduccionIniciada(this)"
@@ -1485,7 +1489,7 @@ async function marcarPasoLocal(id, valor) {
 
 function ejecutarPaso(id) {
   const acc = { alta:()=>marcarPasoLocal('alta',true), 'fac-anticipo':abrirModalAnticipo, pago:gestionarPago,
-    'diseno-trello':abrirTrello, 'diseno-aprobado':()=>marcarPaso('diseno-aprobado'),
+    'diseno-gmail':gmailDiseno, 'diseno-aprobado':()=>marcarPaso('diseno-aprobado'),
     produccion:gmailProduccion, envio:waEnvio, postventa:waPostventa };
   if (acc[id]) acc[id]();
 }
@@ -1572,10 +1576,49 @@ function gestionarPago() {
   }
 }
 
-function abrirTrello() {
-  const nombre = enc(S.pedido.razonSocial || S.pedido.nombreContacto);
-  window.open(`${TRELLO_URL}?name=${nombre}`,'_blank');
-  marcarPaso('diseno-trello');
+function gmailDiseno() {
+  const p = S.pedido;
+  if (!p) return;
+
+  const prods = (p.productos||[]).map(pr =>
+    `${(pr.sku||'').padEnd(12)}| ${String(pr.cantActual||pr.cantOriginal||0).padStart(4)}  | ${pr.descripcion||''}`
+  ).join('\n');
+
+  const asunto = `Solicitud de diseño para vaso venta E-Commerce — ${p.nombreComercial||p.razonSocial||p.nombreContacto} (${p.id})`;
+
+  const body =
+`Hola Nelly,
+
+¿Me ayudarías a hacer el diseño y la ruta de producción para este pedido? Tenemos como fecha límite el ${p.fechaLimite||'—'} para tenerlo listo.
+
+Te adjunto las capturas de pantalla de lo que requiere el cliente:
+
+${'─'.repeat(30)}
+PRODUCTOS
+${'─'.repeat(30)}
+SKU           | CANT  | DESCRIPCIÓN
+--------------+-------+------------------
+${prods}
+
+${'─'.repeat(30)}
+CLIENTE
+${'─'.repeat(30)}
+${p.nombreComercial||p.razonSocial||'—'}
+Folio: ${p.id}
+Fecha límite: ${p.fechaLimite||'—'}
+
+(Adjuntar imágenes de referencia del cliente manualmente antes de enviar)
+
+Saludos,
+${S.asesor.nombre}`;
+
+  const TO  = 'nelly.gonzalez@francobolli.com.mx';
+  const CC  = 'ppalacios@francobolli.com.mx,penelope.martinez@francobolli.com.mx,ricky.moo@grupoavanti.com';
+  window.open(
+    `https://mail.google.com/mail/?view=cm&to=${enc(TO)}&cc=${enc(CC)}&su=${enc(asunto)}&body=${enc(body)}`,
+    '_blank'
+  );
+  marcarPaso('diseno-gmail');
 }
 
 function gmailProduccion() {
@@ -2011,6 +2054,20 @@ function onPdfProduccionChange(input) {
 }
 
 // Shipping cost helpers
+// Habilita/deshabilita campos de dirección según tipo de entrega
+function toggleDireccionEnvio(valor) {
+  const esPickUp = valor === 'Pick Up en instalaciones';
+  const ids = ['f-dir-envio','f-ciudad-envio','f-estado-envio','f-cp-envio'];
+  ids.forEach(id => {
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.disabled = esPickUp;
+    el.classList.toggle('prefilled', esPickUp);
+    if (esPickUp) el.dataset.prevVal = el.value; // guardar valor anterior
+    else if (el.dataset.prevVal !== undefined) el.value = el.dataset.prevVal; // restaurar
+  });
+}
+
 function toggleEnvioLinea() {
   const div = document.getElementById('envio-linea');
   const btn = document.getElementById('btn-toggle-envio');
@@ -2462,7 +2519,7 @@ function abrirWaPrimerContacto() {
 
 <!-- ── MODAL PRODUCCIÓN ── -->
 <div class="modal-overlay" id="modal-produccion" style="display:none">
-  <div class="modal" style="max-width:480px;width:95%">
+  <div class="modal-box" style="max-width:480px;width:95%">
     <div class="font-bold text-fb-dark text-base mb-1">📦 Solicitar producción</div>
     <p class="text-xs text-fb-silver mb-4">Revisa los datos antes de abrir Gmail. Puedes editarlos.</p>
 
@@ -2487,6 +2544,149 @@ function abrirWaPrimerContacto() {
     </div>
   </div>
 </div>
+
+<!-- ══ MODAL DATOS OV ══ -->
+<div class="modal-overlay" id="modal-ov-datos" style="display:none">
+  <div class="modal-box" style="max-width:620px;width:96%">
+    <h3 class="font-black text-fb-dark text-base mb-1">🔢 Datos para OV en EPICOR</h3>
+    <p class="text-xs text-fb-silver mb-4">Puedes seleccionar cualquier dato para copiarlo manualmente.</p>
+
+    <!-- Cliente -->
+    <div class="mb-4">
+      <div class="text-[10px] font-bold uppercase tracking-wide text-fb-mid mb-1">Cliente</div>
+      <div class="bg-fb-cream rounded-xl p-3 text-sm">
+        <div><span class="text-fb-mid text-xs">Razón social:</span>
+          <span id="ov-razon" class="font-bold text-fb-dark ml-1 select-all"></span></div>
+        <div class="mt-1"><span class="text-fb-mid text-xs">Contacto:</span>
+          <span id="ov-contacto" class="font-bold text-fb-dark ml-1 select-all"></span></div>
+        <div class="mt-1"><span class="text-fb-mid text-xs">Fecha de necesidad:</span>
+          <span id="ov-fecha" class="font-bold text-fb-dark ml-1 select-all"></span></div>
+      </div>
+    </div>
+
+    <!-- Tabla de productos -->
+    <div class="mb-4">
+      <div class="text-[10px] font-bold uppercase tracking-wide text-fb-mid mb-1">Productos</div>
+      <div class="overflow-x-auto rounded-xl border border-fb-light">
+        <table class="w-full text-xs" id="ov-tabla-prods">
+          <thead>
+            <tr class="bg-fb-dark text-white">
+              <th class="text-left px-3 py-2">SKU</th>
+              <th class="text-left px-3 py-2">Descripción</th>
+              <th class="text-right px-3 py-2">Cant.</th>
+              <th class="text-right px-3 py-2">P.Unit c/IVA</th>
+              <th class="text-right px-3 py-2">P.Unit s/IVA</th>
+              <th class="text-right px-3 py-2">IVA Unit.</th>
+              <th class="text-right px-3 py-2">Total línea c/IVA</th>
+              <th class="text-right px-3 py-2">Total línea s/IVA</th>
+            </tr>
+          </thead>
+          <tbody id="ov-tbody"></tbody>
+          <tfoot id="ov-tfoot" class="bg-fb-cream font-bold"></tfoot>
+        </table>
+      </div>
+    </div>
+
+    <div class="flex gap-2 mt-2">
+      <button onclick="copiarTablaOV()" class="btn-action btn-copy flex-1 justify-center text-xs">📋 Copiar tabla completa</button>
+      <button onclick="cerrarModal('modal-ov-datos')" class="btn-outline flex-1 text-xs">Cerrar</button>
+    </div>
+  </div>
+</div>
+
+<script>
+function abrirModalDatosOV() {
+  const p = S.pedido;
+  if (!p) return;
+
+  // Cliente
+  document.getElementById('ov-razon').textContent    = p.razonSocial || p.nombreComercial || p.nombreContacto || '—';
+  document.getElementById('ov-contacto').textContent = p.nombreContacto || '—';
+  document.getElementById('ov-fecha').textContent    = p.fechaLimite || '—';
+
+  const fmt = n => Number(n).toLocaleString('es-MX',{minimumFractionDigits:2,maximumFractionDigits:2});
+  const prods = p.productos || [];
+
+  // Filas
+  let totalConIVA = 0, totalSinIVA = 0;
+  const filas = prods.map((pr, i) => {
+    const unitConIVA  = Number(pr.precioUnit || pr.precio || 0);
+    const unitSinIVA  = unitConIVA / 1.16;
+    const ivaUnit     = unitConIVA - unitSinIVA;
+    const cant        = Number(pr.cantActual || pr.cantOriginal || 0);
+    const lineaConIVA = Number(pr.total || unitConIVA * cant);
+    const lineaSinIVA = lineaConIVA / 1.16;
+    totalConIVA += lineaConIVA;
+    totalSinIVA += lineaSinIVA;
+    const bg = i % 2 === 0 ? '' : 'background:#f8f8f8';
+    return `<tr style="${bg}">
+      <td class="px-3 py-2 font-mono select-all">${pr.sku||'—'}</td>
+      <td class="px-3 py-2 select-all">${pr.descripcion||'—'}</td>
+      <td class="px-3 py-2 text-right select-all">${cant}</td>
+      <td class="px-3 py-2 text-right select-all">$${fmt(unitConIVA)}</td>
+      <td class="px-3 py-2 text-right select-all">$${fmt(unitSinIVA)}</td>
+      <td class="px-3 py-2 text-right select-all">$${fmt(ivaUnit)}</td>
+      <td class="px-3 py-2 text-right select-all font-bold">$${fmt(lineaConIVA)}</td>
+      <td class="px-3 py-2 text-right select-all font-bold">$${fmt(lineaSinIVA)}</td>
+    </tr>`;
+  }).join('');
+  document.getElementById('ov-tbody').innerHTML = filas;
+
+  const ivaTotal = totalConIVA - totalSinIVA;
+  document.getElementById('ov-tfoot').innerHTML = `
+    <tr>
+      <td colspan="6" class="px-3 py-2 text-right text-fb-mid text-xs">Subtotal s/IVA</td>
+      <td class="px-3 py-2 text-right select-all">$${fmt(totalSinIVA)}</td>
+      <td class="px-3 py-2 text-right select-all">$${fmt(totalSinIVA)}</td>
+    </tr>
+    <tr>
+      <td colspan="6" class="px-3 py-2 text-right text-fb-mid text-xs">IVA (16%)</td>
+      <td class="px-3 py-2 text-right select-all">$${fmt(ivaTotal)}</td>
+      <td class="px-3 py-2 text-right select-all">$${fmt(ivaTotal)}</td>
+    </tr>
+    <tr class="bg-fb-dark text-white">
+      <td colspan="6" class="px-3 py-2 text-right text-xs font-bold">TOTAL c/IVA</td>
+      <td class="px-3 py-2 text-right select-all font-bold">$${fmt(totalConIVA)}</td>
+      <td class="px-3 py-2 text-right select-all font-bold">$${fmt(totalSinIVA)}</td>
+    </tr>`;
+
+  document.getElementById('modal-ov-datos').style.display = 'flex';
+}
+
+function copiarTablaOV() {
+  const p = S.pedido;
+  if (!p) return;
+  const fmt = n => Number(n).toLocaleString('es-MX',{minimumFractionDigits:2,maximumFractionDigits:2});
+  const prods = p.productos || [];
+  let lines = [];
+  lines.push(`DATOS OV — ${p.razonSocial||p.nombreComercial||p.nombreContacto} (${p.id})`);
+  lines.push(`Contacto: ${p.nombreContacto||'—'} | Fecha de necesidad: ${p.fechaLimite||'—'}`);
+  lines.push('');
+  lines.push('SKU          | DESC                          | CANT | P.Unit c/IVA | P.Unit s/IVA | IVA Unit | Total c/IVA | Total s/IVA');
+  lines.push('─'.repeat(115));
+  let totalConIVA = 0, totalSinIVA = 0;
+  prods.forEach(pr => {
+    const unitConIVA  = Number(pr.precioUnit || pr.precio || 0);
+    const unitSinIVA  = unitConIVA / 1.16;
+    const ivaUnit     = unitConIVA - unitSinIVA;
+    const cant        = Number(pr.cantActual || pr.cantOriginal || 0);
+    const lineaConIVA = Number(pr.total || unitConIVA * cant);
+    const lineaSinIVA = lineaConIVA / 1.16;
+    totalConIVA += lineaConIVA;
+    totalSinIVA += lineaSinIVA;
+    lines.push(
+      `${(pr.sku||'').padEnd(12)} | ${(pr.descripcion||'').substring(0,29).padEnd(29)} | ${String(cant).padStart(4)} | $${fmt(unitConIVA).padStart(10)} | $${fmt(unitSinIVA).padStart(10)} | $${fmt(ivaUnit).padStart(8)} | $${fmt(lineaConIVA).padStart(10)} | $${fmt(lineaSinIVA).padStart(10)}`
+    );
+  });
+  lines.push('─'.repeat(115));
+  const ivaTotal = totalConIVA - totalSinIVA;
+  lines.push(`${'Subtotal s/IVA'.padStart(65)}: $${fmt(totalSinIVA)}`);
+  lines.push(`${'IVA (16%)'.padStart(65)}: $${fmt(ivaTotal)}`);
+  lines.push(`${'TOTAL c/IVA'.padStart(65)}: $${fmt(totalConIVA)}`);
+  navigator.clipboard.writeText(lines.join('\n'));
+  showToast('Tabla copiada al portapapeles ✅');
+}
+</script>
 
 </body>
 </html>
