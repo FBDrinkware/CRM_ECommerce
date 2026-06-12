@@ -620,7 +620,6 @@ let CORREOS = { alta:'', fac:'', prod:'' };
 let DATOS_BANCO = 'Banco: BBVA\nCuenta: COMPLETAR\nCLABE: COMPLETAR\nBeneficiario: FB Drinkware S.A. de C.V.';
 let WHATSAPP_NUM = '5219981951897';
 let CATALOGO_PRODS = [];
-let MAPA_TRANSFORMACIONES = {}; // SKU_ORIG (mayúsculas) → { skuProd, descProd }
 
 // ════════════════════════════════
 // ESTADO GLOBAL
@@ -694,10 +693,9 @@ function cerrarSesion() {
 // CARGAR CONFIG
 // ════════════════════════════════
 async function cargarConfig() {
-  const [resConfig, resProds, resTrans] = await Promise.all([
+  const [resConfig, resProds] = await Promise.all([
     apiGet('getConfig'),
     apiGet('getProductos'),
-    apiGet('getTransformaciones'),
   ]);
   if (resConfig.ok) {
     const c = resConfig.config;
@@ -708,7 +706,6 @@ async function cargarConfig() {
     if (c.WHATSAPP_NUM) WHATSAPP_NUM  = c.WHATSAPP_NUM;
   }
   if (resProds.ok) CATALOGO_PRODS = resProds.productos;
-  if (resTrans.ok) MAPA_TRANSFORMACIONES = resTrans.mapa || {};
 }
 
 // ════════════════════════════════
@@ -1024,6 +1021,11 @@ function irCaptura() {
   const nombresVal = p.nombresIndividuales || p.nombresPorVaso || '';
   if (grabadoVal) setVal('f-grabado', grabadoVal);
   if (nombresVal) setVal('f-nombres', nombresVal);
+
+  // Checkbox Público en General — marcar si ya fue asignado antes
+  const chkPG = document.getElementById('chk-publico-general');
+  if (chkPG) chkPG.checked = (p.razonSocial || '').toUpperCase() === 'PUBLICO EN GENERAL';
+
   if (p.razonSocial || p.regimenFiscal || p.tipoEntrega) {
     document.getElementById('badge-cliente-cap').className = 'tag-exist';
     document.getElementById('badge-cliente-cap').textContent = 'Datos cargados';
@@ -2574,9 +2576,8 @@ function abrirWaPrimerContacto() {
         <table class="w-full text-xs" id="ov-tabla-prods">
           <thead>
             <tr class="bg-fb-dark text-white">
-              <th class="text-left px-3 py-2">SKU Venta</th>
-              <th class="text-left px-3 py-2">SKU Producción</th>
-              <th class="text-left px-3 py-2">Descripción EPICOR</th>
+              <th class="text-left px-3 py-2">SKU</th>
+              <th class="text-left px-3 py-2">Descripción</th>
               <th class="text-right px-3 py-2">Cant.</th>
               <th class="text-right px-3 py-2">P.Unit c/IVA</th>
               <th class="text-right px-3 py-2">P.Unit s/IVA</th>
@@ -2608,20 +2609,12 @@ function abrirModalDatosOV() {
   document.getElementById('ov-contacto').textContent = p.nombreContacto || '—';
   document.getElementById('ov-fecha').textContent    = p.fechaLimite || '—';
 
-  const fmt   = n => Number(n).toLocaleString('es-MX',{minimumFractionDigits:2,maximumFractionDigits:2});
+  const fmt = n => Number(n).toLocaleString('es-MX',{minimumFractionDigits:2,maximumFractionDigits:2});
   const prods = p.productos || [];
-  // Solo aplica transformación si el pedido lleva grabado o nombres
-  const aplicaTransf = (p.grabado === 'Sí' || p.nombresIndividuales === 'Sí' || p.nombresPorVaso === 'Sí');
 
   // Filas
   let totalConIVA = 0, totalSinIVA = 0;
   const filas = prods.map((pr, i) => {
-    const skuOrig     = (pr.sku || '').toString().trim();
-    const transf      = aplicaTransf ? (MAPA_TRANSFORMACIONES[skuOrig.toUpperCase()] || null) : null;
-    const skuProd     = transf ? transf.skuProd  : skuOrig;
-    const descProd    = transf ? transf.descProd : (pr.descripcion || '—');
-    const tieneTransf = !!(transf && transf.skuProd && transf.skuProd !== skuOrig);
-
     const unitConIVA  = Number(pr.precioUnit || pr.precio || 0);
     const unitSinIVA  = unitConIVA / 1.16;
     const ivaUnit     = unitConIVA - unitSinIVA;
@@ -2630,20 +2623,10 @@ function abrirModalDatosOV() {
     const lineaSinIVA = lineaConIVA / 1.16;
     totalConIVA += lineaConIVA;
     totalSinIVA += lineaSinIVA;
-
-    const bg         = i % 2 === 0 ? '' : 'background:#f8f8f8';
-    // SKU Producción: naranja si tiene transformación, normal si no
-    const skuProdCell = tieneTransf
-      ? `<span class="font-mono font-bold select-all" style="color:#ea580c">${skuProd}</span>`
-      : `<span class="font-mono text-fb-silver select-all">— igual —</span>`;
-    const descProdCell = tieneTransf
-      ? `<span class="select-all">${descProd}</span>`
-      : `<span class="text-fb-silver select-all">— igual —</span>`;
-
+    const bg = i % 2 === 0 ? '' : 'background:#f8f8f8';
     return `<tr style="${bg}">
-      <td class="px-3 py-2 font-mono select-all">${skuOrig || '—'}</td>
-      <td class="px-3 py-2">${skuProdCell}</td>
-      <td class="px-3 py-2">${descProdCell}</td>
+      <td class="px-3 py-2 font-mono select-all">${pr.sku||'—'}</td>
+      <td class="px-3 py-2 select-all">${pr.descripcion||'—'}</td>
       <td class="px-3 py-2 text-right select-all">${cant}</td>
       <td class="px-3 py-2 text-right select-all">$${fmt(unitConIVA)}</td>
       <td class="px-3 py-2 text-right select-all">$${fmt(unitSinIVA)}</td>
@@ -2657,17 +2640,17 @@ function abrirModalDatosOV() {
   const ivaTotal = totalConIVA - totalSinIVA;
   document.getElementById('ov-tfoot').innerHTML = `
     <tr>
-      <td colspan="7" class="px-3 py-2 text-right text-fb-mid text-xs">Subtotal s/IVA</td>
+      <td colspan="6" class="px-3 py-2 text-right text-fb-mid text-xs">Subtotal s/IVA</td>
       <td class="px-3 py-2 text-right select-all">$${fmt(totalSinIVA)}</td>
       <td class="px-3 py-2 text-right select-all">$${fmt(totalSinIVA)}</td>
     </tr>
     <tr>
-      <td colspan="7" class="px-3 py-2 text-right text-fb-mid text-xs">IVA (16%)</td>
+      <td colspan="6" class="px-3 py-2 text-right text-fb-mid text-xs">IVA (16%)</td>
       <td class="px-3 py-2 text-right select-all">$${fmt(ivaTotal)}</td>
       <td class="px-3 py-2 text-right select-all">$${fmt(ivaTotal)}</td>
     </tr>
     <tr class="bg-fb-dark text-white">
-      <td colspan="7" class="px-3 py-2 text-right text-xs font-bold">TOTAL c/IVA</td>
+      <td colspan="6" class="px-3 py-2 text-right text-xs font-bold">TOTAL c/IVA</td>
       <td class="px-3 py-2 text-right select-all font-bold">$${fmt(totalConIVA)}</td>
       <td class="px-3 py-2 text-right select-all font-bold">$${fmt(totalSinIVA)}</td>
     </tr>`;
@@ -2678,38 +2661,33 @@ function abrirModalDatosOV() {
 function copiarTablaOV() {
   const p = S.pedido;
   if (!p) return;
-  const fmt  = n => Number(n).toLocaleString('es-MX',{minimumFractionDigits:2,maximumFractionDigits:2});
+  const fmt = n => Number(n).toLocaleString('es-MX',{minimumFractionDigits:2,maximumFractionDigits:2});
   const prods = p.productos || [];
-  const aplicaTransf = (p.grabado === 'Sí' || p.nombresIndividuales === 'Sí' || p.nombresPorVaso === 'Sí');
   let lines = [];
   lines.push(`DATOS OV — ${p.razonSocial||p.nombreComercial||p.nombreContacto} (${p.id})`);
   lines.push(`Contacto: ${p.nombreContacto||'—'} | Fecha de necesidad: ${p.fechaLimite||'—'}`);
   lines.push('');
-  lines.push('SKU Venta    | SKU Producción | Descripción EPICOR             | CANT | P.Unit c/IVA | P.Unit s/IVA | IVA Unit | Total c/IVA | Total s/IVA');
-  lines.push('─'.repeat(145));
+  lines.push('SKU          | DESC                          | CANT | P.Unit c/IVA | P.Unit s/IVA | IVA Unit | Total c/IVA | Total s/IVA');
+  lines.push('─'.repeat(115));
   let totalConIVA = 0, totalSinIVA = 0;
   prods.forEach(pr => {
-    const skuOrig    = (pr.sku || '').toString().trim();
-    const transf     = aplicaTransf ? (MAPA_TRANSFORMACIONES[skuOrig.toUpperCase()] || null) : null;
-    const skuProd    = transf?.skuProd  || '— igual —';
-    const descProd   = transf?.descProd || '— igual —';
-    const unitConIVA = Number(pr.precioUnit || pr.precio || 0);
-    const unitSinIVA = unitConIVA / 1.16;
-    const ivaUnit    = unitConIVA - unitSinIVA;
-    const cant       = Number(pr.cantActual || pr.cantOriginal || 0);
-    const lineaConIVA= Number(pr.total || unitConIVA * cant);
-    const lineaSinIVA= lineaConIVA / 1.16;
+    const unitConIVA  = Number(pr.precioUnit || pr.precio || 0);
+    const unitSinIVA  = unitConIVA / 1.16;
+    const ivaUnit     = unitConIVA - unitSinIVA;
+    const cant        = Number(pr.cantActual || pr.cantOriginal || 0);
+    const lineaConIVA = Number(pr.total || unitConIVA * cant);
+    const lineaSinIVA = lineaConIVA / 1.16;
     totalConIVA += lineaConIVA;
     totalSinIVA += lineaSinIVA;
     lines.push(
-      `${skuOrig.padEnd(12)} | ${skuProd.padEnd(14)} | ${descProd.substring(0,30).padEnd(30)} | ${String(cant).padStart(4)} | $${fmt(unitConIVA).padStart(10)} | $${fmt(unitSinIVA).padStart(10)} | $${fmt(ivaUnit).padStart(8)} | $${fmt(lineaConIVA).padStart(10)} | $${fmt(lineaSinIVA).padStart(10)}`
+      `${(pr.sku||'').padEnd(12)} | ${(pr.descripcion||'').substring(0,29).padEnd(29)} | ${String(cant).padStart(4)} | $${fmt(unitConIVA).padStart(10)} | $${fmt(unitSinIVA).padStart(10)} | $${fmt(ivaUnit).padStart(8)} | $${fmt(lineaConIVA).padStart(10)} | $${fmt(lineaSinIVA).padStart(10)}`
     );
   });
-  lines.push('─'.repeat(145));
+  lines.push('─'.repeat(115));
   const ivaTotal = totalConIVA - totalSinIVA;
-  lines.push(`${'Subtotal s/IVA'.padStart(75)}: $${fmt(totalSinIVA)}`);
-  lines.push(`${'IVA (16%)'.padStart(75)}: $${fmt(ivaTotal)}`);
-  lines.push(`${'TOTAL c/IVA'.padStart(75)}: $${fmt(totalConIVA)}`);
+  lines.push(`${'Subtotal s/IVA'.padStart(65)}: $${fmt(totalSinIVA)}`);
+  lines.push(`${'IVA (16%)'.padStart(65)}: $${fmt(ivaTotal)}`);
+  lines.push(`${'TOTAL c/IVA'.padStart(65)}: $${fmt(totalConIVA)}`);
   navigator.clipboard.writeText(lines.join('\n'));
   showToast('Tabla copiada al portapapeles ✅');
 }
