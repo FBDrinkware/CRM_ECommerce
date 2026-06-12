@@ -1242,6 +1242,10 @@ function renderSeguimiento() {
     document.getElementById('inp-ov').value = p.ovEpicor;
     document.getElementById('ov-ok').style.display = 'block';
     document.getElementById('ov-ok').textContent = '✅ OV: ' + p.ovEpicor;
+  } else {
+    document.getElementById('inp-ov').value = '';
+    document.getElementById('ov-ok').style.display = 'none';
+    document.getElementById('ov-ok').textContent = '';
   }
 
   // Chips
@@ -1362,12 +1366,30 @@ function renderPasos() {
         </div>` : '',
     },
     { id:'fac-anticipo', num:'2', titulo:'Factura de anticipo', icono:'🧾',
-      sub: ps['fac-anticipo']?.noAplica ? 'No aplica — Público en General' :
-           ps['fac-anticipo']?.ok ? 'Correo enviado' : 'Solo si el cliente lo solicitó expresamente',
+      sub: ps['fac-anticipo']?.noAplica ? 'No requiere factura de anticipo' :
+           ps['fac-anticipo']?.ok       ? 'Correo enviado' :
+           'Solo si el cliente lo solicitó expresamente',
       done: !!(ps['fac-anticipo']?.ok) || !!(ps['fac-anticipo']?.noAplica),
-      accion: ps['fac-anticipo']?.noAplica ? null : () => abrirModalAnticipo(),
+      accion: (ps['fac-anticipo']?.noAplica || ps['fac-anticipo']?.ok) ? null : () => abrirModalAnticipo(),
       accionLabel: 'Abrir Gmail',
       tooltip: !ps['fac-anticipo']?.ok && !ps['fac-anticipo']?.noAplica ? 'Recuerda: primero intenta convencer al cliente de esperar la factura de producto' : null,
+      campoExtra: (() => {
+        const esPG      = (p.razonSocial||'').toUpperCase() === 'PUBLICO EN GENERAL';
+        const yaOk      = !!(ps['fac-anticipo']?.ok);        // Gmail enviado
+        const noAplica  = !!(ps['fac-anticipo']?.noAplica);  // marcado como no aplica
+        const checked   = esPG || noAplica ? 'checked' : '';
+        const disabled  = esPG || yaOk     ? 'disabled' : '';
+        const label     = esPG
+          ? 'No requiere factura de anticipo (Público en General)'
+          : 'No requiere factura de anticipo';
+        return `<div class="flex items-center gap-3 mt-3">
+          <input type="checkbox" id="chk-no-anticipo" ${checked} ${disabled}
+            onchange="toggleNoAplicaAnticipo(this)">
+          <label for="chk-no-anticipo" class="text-xs font-bold text-fb-dark ${esPG||yaOk?'opacity-50':'cursor-pointer'}">
+            ${label}
+          </label>
+        </div>`;
+      })(),
     },
     { id:'pago', num:'3', titulo:'Gestionar pago', icono: p.formaPago?.includes('TDC') ? '💳' : '🏦',
       sub: p.formaPago?.includes('TDC') ? 'Generar link CLIP' : 'Compartir datos de transferencia',
@@ -1393,7 +1415,8 @@ function renderPasos() {
     { id:'ov', num:'5', titulo:'OV en EPICOR', icono:'🔢',
       sub: tieneOV ? 'OV: ' + p.ovEpicor : 'Ingresa la OV en el campo de arriba',
       done: tieneOV,
-      accion: null, accionLabel: '↑ Campo OV arriba',
+      accion: tieneOV ? null : () => { const el=document.getElementById('inp-ov'); el.scrollIntoView({behavior:'smooth',block:'center'}); el.focus(); },
+      accionLabel: '↑ Ingresar OV',
       tooltip: !tieneOV ? 'Genera la OV en EPICOR e ingrésala en el campo de arriba' : null,
     },
     { id:'produccion', num:'6', titulo:'Solicitar producción', icono:'🏭',
@@ -2103,6 +2126,28 @@ function actualizarTotalConEnvio() {
 }
 
 // Anticipo modal
+async function toggleNoAplicaAnticipo(el) {
+  const marcar = el.checked;
+  const msg = marcar
+    ? '¿Confirmas que este cliente no requiere factura de anticipo?'
+    : '¿Confirmas que este cliente sí requiere factura de anticipo? El paso se reabrirá.';
+  if (!confirm(msg)) { el.checked = !marcar; return; }
+
+  const ts = new Date().toLocaleString('es-MX');
+  if (marcar) {
+    S.pasos['fac-anticipo'] = { ok: true, noAplica: true, ts };
+    await apiPost({ action:'marcarPaso', fbk:S.pedido.id, paso:'fac-anticipo',
+      valor:true, noAplica:true, ts, quien:S.asesor.nombre });
+  } else {
+    delete S.pasos['fac-anticipo'];
+    await apiPost({ action:'marcarPaso', fbk:S.pedido.id, paso:'fac-anticipo',
+      valor:false, ts, quien:S.asesor.nombre });
+  }
+  guardarSession();
+  renderPasos();
+  showToast(marcar ? 'Factura de anticipo marcada como no requerida' : 'Paso de factura de anticipo reactivado');
+}
+
 function abrirModalAnticipo() {
   const subtotal = S.pedido?.subtotal || 0;
   const costoEnvio = parseFloat(document.getElementById('f-costo-envio')?.value) || 0;
