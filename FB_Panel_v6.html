@@ -1415,7 +1415,7 @@ function renderPasos() {
     { id:'ov', num:'5', titulo:'OV en EPICOR', icono:'🔢',
       sub: tieneOV ? 'OV: ' + p.ovEpicor : 'Ingresa la OV en el campo de arriba',
       done: tieneOV,
-      accion: tieneOV ? null : () => { window.scrollTo({top:0,behavior:'smooth'}); setTimeout(()=>document.getElementById('inp-ov').focus(),400); },
+      accion: tieneOV ? null : () => { const el=document.getElementById('inp-ov'); el.closest('.card').scrollIntoView({behavior:'smooth',block:'start'}); setTimeout(()=>el.focus(),400); },
       accionLabel: '↑ Ingresar OV',
       tooltip: !tieneOV ? 'Genera la OV en EPICOR e ingrésala en el campo de arriba' : null,
     },
