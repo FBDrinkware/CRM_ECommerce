@@ -1588,9 +1588,14 @@ function gmailDiseno() {
   const p = S.pedido;
   if (!p) return;
 
-  const prods = (p.productos||[]).map(pr =>
-    `${(pr.sku||'').padEnd(12)}| ${String(pr.cantActual||pr.cantOriginal||0).padStart(4)}  | ${pr.descripcion||''}`
-  ).join('\n');
+  const aplicaTransf = (p.grabado === 'Sí' || p.nombresIndividuales === 'Sí' || p.nombresPorVaso === 'Sí');
+  const prods = (p.productos||[]).map(pr => {
+    const skuOrig  = (pr.sku||'').toString().trim();
+    const transf   = aplicaTransf ? (MAPA_TRANSFORMACIONES[skuOrig.toUpperCase()] || null) : null;
+    const skuFinal = transf?.skuProd  || skuOrig;
+    const descFinal= transf?.descProd || pr.descripcion || '';
+    return `${skuFinal.padEnd(12)}| ${String(pr.cantActual||pr.cantOriginal||0).padStart(4)}  | ${descFinal}`;
+  }).join('\n');
 
   const asunto = `Solicitud de diseño para vaso venta E-Commerce — ${p.nombreComercial||p.razonSocial||p.nombreContacto} (${p.id})`;
 
