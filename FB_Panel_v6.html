@@ -155,6 +155,7 @@
     <button class="tab-btn" onclick="showTab('tab-captura',this)" id="tab-btn-cap">📝 Captura</button>
     <button class="tab-btn" onclick="showTab('tab-seguimiento',this)" id="tab-btn-seg">⚡ Seguimiento</button>
     <button class="tab-btn" id="tab-btn-admin" onclick="showTab('tab-admin',this)" style="display:none">👑 Admin</button>
+    <button class="tab-btn" onclick="showTab('tab-cotizador',this)" id="tab-btn-cotizador">💰 Cotizador</button>
   </div>
 </header>
 
@@ -527,6 +528,94 @@
   </div>
 </div>
 
+<!-- ══ TAB COTIZADOR ══ -->
+<div class="screen" id="tab-cotizador">
+
+  <!-- Encabezado con número y acciones -->
+  <div class="card mb-3">
+    <div class="flex items-center justify-between">
+      <div>
+        <div class="seccion mb-0">💰 Cotizador</div>
+        <div class="text-xs text-fb-silver mt-1" id="cot-num-display">Nueva cotización</div>
+      </div>
+      <div class="flex gap-2">
+        <button onclick="cotHistorial()" class="btn-outline text-xs">📂 Historial</button>
+        <button onclick="cotNueva()" class="btn-outline text-xs">+ Nueva</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Datos del cliente -->
+  <div class="card mb-3">
+    <div class="seccion">Cliente</div>
+    <div class="flex gap-2 mb-2">
+      <div class="campo flex-1"><label>Nombre / Empresa *</label>
+        <input type="text" id="cot-cliente" placeholder="Ej: Bodas Cancún S.A."></div>
+      <div class="campo flex-1"><label>Correo (opcional)</label>
+        <input type="email" id="cot-correo" placeholder="cliente@ejemplo.com"></div>
+    </div>
+    <div class="flex gap-2">
+      <div class="campo flex-1"><label>Teléfono (opcional)</label>
+        <input type="tel" id="cot-tel" placeholder="998 000 0000"></div>
+      <div class="campo flex-1"><label>Vigencia</label>
+        <input type="date" id="cot-vigencia"></div>
+    </div>
+  </div>
+
+  <!-- Tabla de productos -->
+  <div class="card mb-3">
+    <div class="seccion">Productos</div>
+    <div id="cot-lineas" class="space-y-3 mb-3"></div>
+    <button onclick="cotAgregarLinea()" class="btn-outline text-xs w-full">+ Agregar producto</button>
+  </div>
+
+  <!-- Descuentos y totales -->
+  <div class="card mb-3">
+    <div class="seccion">Totales</div>
+    <div class="flex items-center gap-3 mb-3">
+      <label class="text-xs font-bold text-fb-dark">Descuento global (%)</label>
+      <input type="number" id="cot-desc-global" value="0" min="0" max="100" step="0.5"
+        class="border border-fb-light rounded-xl px-3 py-2 text-sm w-24 outline-none"
+        oninput="cotRecalcular()">
+      <span class="text-xs text-fb-silver">Se aplica sobre el subtotal después de descuentos por línea</span>
+    </div>
+    <div class="grid grid-cols-2 gap-x-4 gap-y-1 text-sm max-w-xs ml-auto">
+      <span class="text-fb-silver text-right text-xs">Subtotal s/IVA:</span>
+      <span class="text-right font-bold" id="cot-sub">$0.00</span>
+      <span class="text-fb-silver text-right text-xs">Descuento:</span>
+      <span class="text-right text-red-500" id="cot-desc-monto">$0.00</span>
+      <span class="text-fb-silver text-right text-xs">IVA (16%):</span>
+      <span class="text-right" id="cot-iva">$0.00</span>
+      <span class="text-fb-dark font-bold text-right text-xs">TOTAL c/IVA:</span>
+      <span class="text-right font-bold text-fb-dark" id="cot-total">$0.00</span>
+    </div>
+  </div>
+
+  <!-- Nota al pie -->
+  <div class="card mb-3">
+    <div class="seccion">Nota para el cliente</div>
+    <textarea id="cot-nota" style="min-height:70px"
+      class="w-full border border-fb-light rounded-xl px-3 py-2 text-sm outline-none">Nuestros precios incluyen IVA. El costo unitario incluye un solo grabado.</textarea>
+  </div>
+
+  <!-- Acciones -->
+  <div class="card">
+    <div class="flex gap-2 flex-wrap">
+      <button onclick="cotGenerarPDF()" class="btn-primary flex-1" style="min-width:140px">
+        📄 Descargar PDF
+      </button>
+      <button onclick="cotGuardar()" class="btn-outline flex-1" style="min-width:120px">
+        💾 Guardar cotización
+      </button>
+      <button onclick="cotConvertirPedido()" class="btn-outline flex-1" style="min-width:140px">
+        🔄 Convertir a pedido
+      </button>
+    </div>
+    <div id="cot-status" class="text-xs text-fb-silver mt-2 text-center"></div>
+  </div>
+
+</div>
+
 </div><!-- /max-w -->
 </div><!-- /app-principal -->
 
@@ -690,8 +779,336 @@ function cerrarSesion() {
   location.reload();
 }
 
+
 // ════════════════════════════════
-// CARGAR CONFIG
+// COTIZADOR
+// ════════════════════════════════
+let COT = {
+  num: null,       // COT-2026-XXXX
+  lineas: [],      // [{sku,desc,img,precioBase,precioEdit,cant,descLinea}]
+  guardado: false,
+};
+
+function cotNueva() {
+  COT = { num: null, lineas: [], guardado: false };
+  document.getElementById('cot-cliente').value  = '';
+  document.getElementById('cot-correo').value   = '';
+  document.getElementById('cot-tel').value      = '';
+  document.getElementById('cot-desc-global').value = '0';
+  document.getElementById('cot-nota').value     = 'Nuestros precios incluyen IVA. El costo unitario incluye un solo grabado.';
+  const hoy = new Date(); hoy.setDate(hoy.getDate()+15);
+  document.getElementById('cot-vigencia').value = hoy.toISOString().split('T')[0];
+  document.getElementById('cot-num-display').textContent = 'Nueva cotización';
+  document.getElementById('cot-status').textContent = '';
+  cotRenderLineas();
+  cotRecalcular();
+}
+
+function cotAgregarLinea(skuPre) {
+  const prod = skuPre ? CATALOGO_PRODS.find(p=>p.sku===skuPre) : null;
+  COT.lineas.push({
+    sku:       prod?.sku       || '',
+    desc:      prod?.nombre    || '',
+    img:       prod?.imagen    || '',
+    precioBase: Number(prod?.precio) || 0,
+    precioEdit: Number(prod?.precio) || 0,
+    cant:      1,
+    descLinea: 0,
+  });
+  cotRenderLineas();
+  cotRecalcular();
+}
+
+function cotRenderLineas() {
+  const cont = document.getElementById('cot-lineas');
+  if (COT.lineas.length === 0) {
+    cont.innerHTML = '<p class="text-xs text-fb-silver text-center py-2">Sin productos — agrega uno abajo</p>';
+    return;
+  }
+  cont.innerHTML = COT.lineas.map((l, i) => `
+    <div class="border border-fb-light rounded-xl p-3 space-y-2" id="cot-linea-${i}">
+      <div class="flex gap-2 items-start">
+        ${l.img ? `<img src="${l.img}" class="w-12 h-12 rounded-lg object-cover flex-shrink-0" onerror="this.style.display='none'">` : ''}
+        <div class="flex-1 min-w-0">
+          <select onchange="cotCambiarProd(${i},this.value)"
+            class="w-full border border-fb-light rounded-lg px-2 py-1.5 text-xs outline-none mb-1">
+            <option value="">— Selecciona producto —</option>
+            ${CATALOGO_PRODS.map(p=>`<option value="${p.sku}" ${p.sku===l.sku?'selected':''}>${p.sku} — ${p.nombre}</option>`).join('')}
+          </select>
+          <div class="text-[10px] text-fb-silver">${l.desc||'Sin descripción'}</div>
+        </div>
+        <button onclick="cotEliminarLinea(${i})" class="text-red-400 text-xs flex-shrink-0 mt-1">✕</button>
+      </div>
+      <div class="grid grid-cols-3 gap-2">
+        <div>
+          <div class="text-[10px] text-fb-silver mb-1">Cantidad</div>
+          <input type="number" min="1" value="${l.cant}"
+            class="w-full border border-fb-light rounded-lg px-2 py-1.5 text-xs outline-none"
+            oninput="COT.lineas[${i}].cant=Number(this.value)||1;cotRecalcular()">
+        </div>
+        <div>
+          <div class="text-[10px] text-fb-silver mb-1">P.Unit c/IVA ${l.precioEdit!==l.precioBase?'<span style="color:#ea580c">✎</span>':''}</div>
+          <input type="number" min="0" step="0.01" value="${l.precioEdit}"
+            class="w-full border rounded-lg px-2 py-1.5 text-xs outline-none ${l.precioEdit!==l.precioBase?'border-orange-400':'border-fb-light'}"
+            oninput="COT.lineas[${i}].precioEdit=Number(this.value)||0;cotRecalcular()">
+        </div>
+        <div>
+          <div class="text-[10px] text-fb-silver mb-1">Desc. línea (%)</div>
+          <input type="number" min="0" max="100" step="0.5" value="${l.descLinea}"
+            class="w-full border border-fb-light rounded-lg px-2 py-1.5 text-xs outline-none"
+            oninput="COT.lineas[${i}].descLinea=Number(this.value)||0;cotRecalcular()">
+        </div>
+      </div>
+      <div class="text-right text-xs font-bold text-fb-dark" id="cot-linea-total-${i}">
+        $${cotTotalLinea(l).toLocaleString('es-MX',{minimumFractionDigits:2})}
+      </div>
+    </div>`).join('');
+}
+
+function cotCambiarProd(i, sku) {
+  const prod = CATALOGO_PRODS.find(p=>p.sku===sku);
+  if (!prod) return;
+  COT.lineas[i] = { ...COT.lineas[i], sku:prod.sku, desc:prod.nombre,
+    img:prod.imagen||'', precioBase:Number(prod.precio), precioEdit:Number(prod.precio) };
+  cotRenderLineas(); cotRecalcular();
+}
+
+function cotEliminarLinea(i) {
+  COT.lineas.splice(i,1); cotRenderLineas(); cotRecalcular();
+}
+
+function cotTotalLinea(l) {
+  const base = l.precioEdit * l.cant;
+  return base * (1 - (l.descLinea||0)/100);
+}
+
+function cotRecalcular() {
+  const descGlobal = Number(document.getElementById('cot-desc-global')?.value)||0;
+  const fmt = n => n.toLocaleString('es-MX',{minimumFractionDigits:2});
+  let subConIVA = 0;
+  COT.lineas.forEach((l,i) => {
+    const t = cotTotalLinea(l);
+    subConIVA += t;
+    const el = document.getElementById(`cot-linea-total-${i}`);
+    if (el) el.textContent = '$' + fmt(t);
+  });
+  const descMonto   = subConIVA * descGlobal / 100;
+  const neto        = subConIVA - descMonto;
+  const subSinIVA   = neto / 1.16;
+  const iva         = neto - subSinIVA;
+  document.getElementById('cot-sub').textContent       = '$' + fmt(subSinIVA);
+  document.getElementById('cot-desc-monto').textContent= descMonto>0 ? '-$'+fmt(descMonto/1.16) : '$0.00';
+  document.getElementById('cot-iva').textContent       = '$' + fmt(iva);
+  document.getElementById('cot-total').textContent     = '$' + fmt(neto);
+}
+
+async function cotGuardar() {
+  const cliente = document.getElementById('cot-cliente').value.trim();
+  if (!cliente) { showToast('Ingresa el nombre del cliente'); return; }
+  if (COT.lineas.length===0) { showToast('Agrega al menos un producto'); return; }
+  document.getElementById('cot-status').textContent = 'Guardando...';
+  const res = await apiPost({
+    action:   'guardarCotizacion',
+    asesor:   S.asesor.correo,
+    asesorNom: S.asesor.nombre,
+    cliente,
+    correo:   document.getElementById('cot-correo').value,
+    tel:      document.getElementById('cot-tel').value,
+    vigencia: document.getElementById('cot-vigencia').value,
+    nota:     document.getElementById('cot-nota').value,
+    descGlobal: Number(document.getElementById('cot-desc-global').value)||0,
+    lineas:   COT.lineas,
+    total:    document.getElementById('cot-total').textContent,
+    numExistente: COT.num || null,
+  });
+  if (res.ok) {
+    if (res.num) { COT.num = res.num; document.getElementById('cot-num-display').textContent = COT.num; }
+    COT.guardado = true;
+    document.getElementById('cot-status').textContent = '✅ Guardado como ' + (COT.num||'');
+    showToast('Cotización guardada');
+  } else {
+    document.getElementById('cot-status').textContent = '❌ Error al guardar';
+  }
+}
+
+async function cotConvertirPedido() {
+  const cliente = document.getElementById('cot-cliente').value.trim();
+  if (!cliente) { showToast('Ingresa el nombre del cliente'); return; }
+  if (COT.lineas.length===0) { showToast('Agrega al menos un producto'); return; }
+  if (!confirm(`¿Convertir esta cotización en pedido para ${cliente}? Se creará un nuevo FBK en el panel.`)) return;
+  document.getElementById('cot-status').textContent = 'Creando pedido...';
+  const res = await apiPost({
+    action:   'cotizacionAPedido',
+    asesor:   S.asesor.codigo,
+    asesorNombre: S.asesor.nombre,
+    nombre:   cliente,
+    correo:   document.getElementById('cot-correo').value,
+    telefono: document.getElementById('cot-tel').value,
+    productos: COT.lineas.map(l=>({
+      sku: l.sku, descripcion: l.desc,
+      cantidad: l.cant, precioUnit: l.precioEdit,
+    })),
+    cotNum: COT.num || '',
+  });
+  if (res.ok) {
+    document.getElementById('cot-status').textContent = '✅ Pedido creado: ' + (res.fbk||'');
+    showToast('Pedido creado: ' + (res.fbk||''));
+  } else {
+    document.getElementById('cot-status').textContent = '❌ Error al crear pedido';
+  }
+}
+
+async function cotHistorial() {
+  showToast('Cargando historial...');
+  const res = await apiGet('getCotizaciones', { asesor: S.asesor.correo });
+  if (!res.ok || !res.cotizaciones?.length) { showToast('Sin cotizaciones guardadas'); return; }
+  const lista = res.cotizaciones.map(c =>
+    `<div class="border-b border-fb-light py-2 flex justify-between items-center">
+      <div>
+        <div class="text-xs font-bold">${c.num} — ${c.cliente}</div>
+        <div class="text-[10px] text-fb-silver">${c.fecha} · ${c.total}</div>
+      </div>
+      <button onclick="cotCargar('${c.num}')" class="btn-outline text-xs">Abrir</button>
+    </div>`).join('');
+  // Mostrar en modal reutilizable
+  document.getElementById('modal-historial-cot').querySelector('.cot-hist-body').innerHTML = lista;
+  document.getElementById('modal-historial-cot').style.display = 'flex';
+}
+
+async function cotCargar(num) {
+  const res = await apiGet('getCotizacion', { num });
+  if (!res.ok) { showToast('No se encontró la cotización'); return; }
+  const c = res.cotizacion;
+  COT.num    = c.num;
+  COT.lineas = c.lineas || [];
+  COT.guardado = true;
+  document.getElementById('cot-cliente').value     = c.cliente || '';
+  document.getElementById('cot-correo').value      = c.correo  || '';
+  document.getElementById('cot-tel').value         = c.tel     || '';
+  document.getElementById('cot-vigencia').value    = c.vigencia|| '';
+  document.getElementById('cot-nota').value        = c.nota    || '';
+  document.getElementById('cot-desc-global').value = c.descGlobal||0;
+  document.getElementById('cot-num-display').textContent = c.num;
+  cerrarModal('modal-historial-cot');
+  cotRenderLineas();
+  cotRecalcular();
+}
+
+function cotGenerarPDF() {
+  const cliente  = document.getElementById('cot-cliente').value.trim() || 'Cliente';
+  const correo   = document.getElementById('cot-correo').value.trim();
+  const tel      = document.getElementById('cot-tel').value.trim();
+  const vigencia = document.getElementById('cot-vigencia').value;
+  const nota     = document.getElementById('cot-nota').value.trim();
+  const descG    = Number(document.getElementById('cot-desc-global').value)||0;
+  const num      = COT.num || ('COT-' + new Date().getFullYear() + '-' + Date.now().toString().slice(-4));
+  const fmt      = n => n.toLocaleString('es-MX',{minimumFractionDigits:2});
+  const fmtF     = d => { if(!d) return '—'; const [y,m,dd]=d.split('-'); return `${dd}/${m}/${y}`; };
+
+  // Calcular totales
+  let subConIVA = 0;
+  COT.lineas.forEach(l => { subConIVA += cotTotalLinea(l); });
+  const descMonto   = subConIVA * descG / 100;
+  const neto        = subConIVA - descMonto;
+  const subSinIVA   = neto / 1.16;
+  const iva         = neto - subSinIVA;
+
+  // Generar tabla de productos HTML
+  const filasProds = COT.lineas.map((l,i) => {
+    const totalLinea = cotTotalLinea(l);
+    return `<tr style="background:${i%2===0?'#f8f9fb':'#fff'}">
+      <td style="padding:8px 10px;font-size:11px;color:#555">${l.sku||'—'}</td>
+      <td style="padding:8px 10px;font-size:11px">${l.desc||'—'}</td>
+      <td style="padding:8px 10px;font-size:11px;text-align:center">${l.cant}</td>
+      <td style="padding:8px 10px;font-size:11px;text-align:right">$${fmt(l.precioEdit)}</td>
+      <td style="padding:8px 10px;font-size:11px;text-align:right">${l.descLinea>0?l.descLinea+'%':'—'}</td>
+      <td style="padding:8px 10px;font-size:11px;text-align:right;font-weight:600">$${fmt(totalLinea)}</td>
+    </tr>`;
+  }).join('');
+
+  const htmlPDF = `<!DOCTYPE html><html><head><meta charset="utf-8">
+  <style>
+    *{box-sizing:border-box;margin:0;padding:0}
+    body{font-family:Arial,sans-serif;font-size:12px;color:#1a2744;background:#fff}
+    .header{background:#1a2744;padding:24px 32px;display:flex;justify-content:space-between;align-items:center}
+    .header-title{color:#fff;font-size:26px;font-weight:700}
+    .header-logo{color:#fff;font-size:13px;text-align:right;line-height:1.6}
+    .body{padding:28px 32px}
+    .meta{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:24px}
+    .meta-block{background:#f8f9fb;border-radius:8px;padding:12px 16px}
+    .meta-label{font-size:10px;color:#888;text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px}
+    .meta-val{font-size:13px;font-weight:600}
+    .meta-val-sm{font-size:11px;color:#444;margin-top:2px}
+    table{width:100%;border-collapse:collapse;margin-bottom:20px}
+    th{background:#1a2744;color:#fff;padding:9px 10px;font-size:11px;text-align:left}
+    th:not(:first-child){text-align:right}
+    th:nth-child(3){text-align:center}
+    .totals{max-width:280px;margin-left:auto;border-top:2px solid #1a2744;padding-top:12px}
+    .tot-row{display:flex;justify-content:space-between;font-size:11px;padding:3px 0;color:#555}
+    .tot-row.final{font-size:14px;font-weight:700;color:#1a2744;border-top:1px solid #ddd;margin-top:6px;padding-top:6px}
+    .nota{background:#f8f9fb;border-left:3px solid #1a2744;padding:10px 14px;border-radius:0 6px 6px 0;margin-top:20px}
+    .nota-title{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px}
+    .nota-text{font-size:11px;color:#444;line-height:1.5}
+    .footer{margin-top:32px;border-top:1px solid #e0e0e0;padding-top:12px;display:flex;justify-content:space-between}
+    .footer-txt{font-size:10px;color:#999}
+    @media print{body{-webkit-print-color-adjust:exact;print-color-adjust:exact}}
+  </style></head><body>
+  <div class="header">
+    <div class="header-title">Cotización</div>
+    <div class="header-logo"><strong>FB Drinkware</strong><br>998 395 4858<br>fbdrinkware.com.mx</div>
+  </div>
+  <div class="body">
+    <div class="meta">
+      <div class="meta-block">
+        <div class="meta-label">Cliente</div>
+        <div class="meta-val">${cliente}</div>
+        ${correo?`<div class="meta-val-sm">${correo}</div>`:''}
+        ${tel?`<div class="meta-val-sm">${tel}</div>`:''}
+      </div>
+      <div class="meta-block">
+        <div class="meta-label">Datos de cotización</div>
+        <div class="meta-val">${num}</div>
+        <div class="meta-val-sm">Fecha: ${fmtF(new Date().toISOString().split('T')[0])}</div>
+        <div class="meta-val-sm">Vigencia: ${fmtF(vigencia)}</div>
+        <div class="meta-val-sm">Asesor: ${S.asesor.nombre}</div>
+      </div>
+    </div>
+    <table>
+      <thead><tr>
+        <th>SKU</th><th style="text-align:left">Concepto</th>
+        <th style="text-align:center">Piezas</th>
+        <th style="text-align:right">P. Unitario</th>
+        <th style="text-align:right">Descuento</th>
+        <th style="text-align:right">Total</th>
+      </tr></thead>
+      <tbody>${filasProds}</tbody>
+    </table>
+    <div class="totals">
+      <div class="tot-row"><span>Subtotal s/IVA</span><span>$${fmt(subSinIVA)}</span></div>
+      ${descMonto>0?`<div class="tot-row"><span>Descuento (${descG}%)</span><span>-$${fmt(descMonto/1.16)}</span></div>`:''}
+      <div class="tot-row"><span>IVA (16%)</span><span>$${fmt(iva)}</span></div>
+      <div class="tot-row final"><span>TOTAL</span><span>$${fmt(neto)}</span></div>
+    </div>
+    ${nota?`<div class="nota"><div class="nota-title">Nota</div><div class="nota-text">${nota}</div></div>`:''}
+    <div class="footer">
+      <span class="footer-txt">${num} · Generado ${new Date().toLocaleDateString('es-MX')}</span>
+      <span class="footer-txt">FB Drinkware · fbdrinkware.com.mx</span>
+    </div>
+  </div>
+  </body></html>`;
+
+  // Abrir ventana e imprimir como PDF
+  const win = window.open('','_blank','width=900,height=700');
+  win.document.write(htmlPDF);
+  win.document.close();
+  win.onload = () => { win.focus(); win.print(); };
+}
+
+// Inicializar cotizador al cargar
+function initCotizador() {
+  if (CATALOGO_PRODS.length > 0) cotNueva();
+}
+
 // ════════════════════════════════
 async function cargarConfig() {
   const [resConfig, resProds, resTrans] = await Promise.all([
@@ -707,7 +1124,7 @@ async function cargarConfig() {
     if (c.DATOS_BANCO)  DATOS_BANCO   = c.DATOS_BANCO;
     if (c.WHATSAPP_NUM) WHATSAPP_NUM  = c.WHATSAPP_NUM;
   }
-  if (resProds.ok) CATALOGO_PRODS = resProds.productos;
+  if (resProds.ok) { CATALOGO_PRODS = resProds.productos; initCotizador(); }
   if (resTrans.ok) MAPA_TRANSFORMACIONES = resTrans.mapa || {};
 }
 
@@ -1417,9 +1834,19 @@ function renderPasos() {
       done: tieneOV,
       accion: tieneOV ? null : () => {
         const el = document.getElementById('inp-ov');
-        const y  = el.getBoundingClientRect().top + window.pageYOffset - 80;
-        window.scrollTo({top: y, behavior: 'smooth'});
-        setTimeout(() => el.focus(), 400);
+        const card = el.closest('.card');
+        // Scroll
+        const y = card.getBoundingClientRect().top + window.pageYOffset - 70;
+        window.scrollTo({top: Math.max(0, y), behavior: 'smooth'});
+        // Highlight: borde naranja parpadeante por 2 segundos
+        el.style.transition = 'box-shadow 0.2s, border-color 0.2s';
+        el.style.borderColor = '#ea580c';
+        el.style.boxShadow   = '0 0 0 3px rgba(234,88,12,0.25)';
+        setTimeout(() => el.focus(), 300);
+        setTimeout(() => {
+          el.style.borderColor = '';
+          el.style.boxShadow   = '';
+        }, 2000);
       },
       accionLabel: '↑ Ingresar OV',
       tooltip: !tieneOV ? 'Genera la OV en EPICOR e ingrésala en el campo de arriba' : null,
@@ -1648,6 +2075,11 @@ ${p.nombreComercial||p.razonSocial||'—'}
 Folio: ${p.id}
 Fecha límite: ${p.fechaLimite||'—'}
 
+${'─'.repeat(30)}
+DISEÑO
+${'─'.repeat(30)}
+(Coloca los detalles del diseño aquí)
+
 (Adjuntar imágenes de referencia del cliente manualmente antes de enviar)
 
 Saludos,
@@ -1679,7 +2111,7 @@ function gmailProduccion() {
   if (notaFact) {
     notaFact.value = tieneFactura
       ? `Equipo de Facturación, el cliente SÍ requiere factura. Favor de facturar con los datos fiscales enviados al RFC ${p.rfc||p.rfcPedido}, razón social: ${p.razonSocial||'—'}.`
-      : 'Equipo de Facturación, el cliente NO requiere factura para este pedido.';
+      : 'Equipo de Facturación, el cliente NO requiere factura para este pedido. Se factura a público general.';
   }
 
   // Limpiar comentarios de almacén
@@ -2653,6 +3085,7 @@ function abrirWaPrimerContacto() {
 
     <div class="flex gap-2 mt-2">
       <button onclick="copiarTablaOV()" class="btn-action btn-copy flex-1 justify-center text-xs">📋 Copiar tabla completa</button>
+      <button onclick="copiarTablaEPICOR()" class="btn-outline flex-1 justify-center text-xs">📥 Copiar para EPICOR</button>
       <button onclick="cerrarModal('modal-ov-datos')" class="btn-outline flex-1 text-xs">Cerrar</button>
     </div>
   </div>
@@ -2664,9 +3097,10 @@ function abrirModalDatosOV() {
   if (!p) return;
 
   // Cliente
+  const fmtFecha = f => { if(!f||f==='—') return '—'; const [y,m,d]=f.split('-'); return d&&m&&y?`${d}/${m}/${y}`:f; };
   document.getElementById('ov-razon').textContent    = p.razonSocial || p.nombreComercial || p.nombreContacto || '—';
   document.getElementById('ov-contacto').textContent = p.nombreContacto || '—';
-  document.getElementById('ov-fecha').textContent    = p.fechaLimite || '—';
+  document.getElementById('ov-fecha').textContent    = fmtFecha(p.fechaLimite);
 
   const fmt   = n => Number(n).toLocaleString('es-MX',{minimumFractionDigits:2,maximumFractionDigits:2});
   const prods = p.productos || [];
@@ -2718,7 +3152,7 @@ function abrirModalDatosOV() {
   document.getElementById('ov-tfoot').innerHTML = `
     <tr>
       <td colspan="7" class="px-3 py-2 text-right text-fb-mid text-xs">Subtotal s/IVA</td>
-      <td class="px-3 py-2 text-right select-all">$${fmt(totalSinIVA)}</td>
+      <td class="px-3 py-2 text-right select-all">$${fmt(totalConIVA - ivaTotal)}</td>
       <td class="px-3 py-2 text-right select-all">$${fmt(totalSinIVA)}</td>
     </tr>
     <tr>
@@ -2727,12 +3161,34 @@ function abrirModalDatosOV() {
       <td class="px-3 py-2 text-right select-all">$${fmt(ivaTotal)}</td>
     </tr>
     <tr class="bg-fb-dark text-white">
-      <td colspan="7" class="px-3 py-2 text-right text-xs font-bold">TOTAL c/IVA</td>
+      <td colspan="7" class="px-3 py-2 text-right text-xs font-bold">TOTAL</td>
       <td class="px-3 py-2 text-right select-all font-bold">$${fmt(totalConIVA)}</td>
       <td class="px-3 py-2 text-right select-all font-bold">$${fmt(totalSinIVA)}</td>
     </tr>`;
 
   document.getElementById('modal-ov-datos').style.display = 'flex';
+}
+
+// Copia tabla en formato TSV para pegar directamente en EPICOR
+// Columnas: A=vacío, B=vacío, C=SKU producción, D=cantidad, E=vacío, F=descripción, G=vacío, H=precio s/IVA
+function copiarTablaEPICOR() {
+  const p = S.pedido;
+  if (!p) return;
+  const prods = p.productos || [];
+  const aplicaTransf = (p.grabado === 'Sí' || p.nombresIndividuales === 'Sí' || p.nombresPorVaso === 'Sí');
+  const rows = prods.map(pr => {
+    const skuOrig    = (pr.sku || '').toString().trim();
+    const transf     = aplicaTransf ? (MAPA_TRANSFORMACIONES[skuOrig.toUpperCase()] || null) : null;
+    const skuProd    = transf?.skuProd  || skuOrig;
+    const descProd   = transf?.descProd || pr.descripcion || '';
+    const cant       = Number(pr.cantActual || pr.cantOriginal || 0);
+    const unitConIVA = Number(pr.precioUnit || pr.precio || 0);
+    const unitSinIVA = (unitConIVA / 1.16).toFixed(2);
+    // TSV: A=vacío  B=vacío  C=SKU  D=cant  E=vacío  F=desc  G=vacío  H=precio s/IVA
+    return `\t\t${skuProd}\t${cant}\t\t${descProd}\t\t${unitSinIVA}`;
+  });
+  navigator.clipboard.writeText(rows.join('\n'));
+  showToast('Tabla EPICOR copiada — pega directamente en la OV ✅');
 }
 
 function copiarTablaOV() {
@@ -2774,6 +3230,14 @@ function copiarTablaOV() {
   showToast('Tabla copiada al portapapeles ✅');
 }
 </script>
+<!-- ══ MODAL HISTORIAL COTIZACIONES ══ -->
+<div class="modal-overlay" id="modal-historial-cot" style="display:none">
+  <div class="modal-box" style="max-width:480px;width:96%">
+    <h3 class="font-black text-fb-dark text-base mb-3">📂 Mis cotizaciones</h3>
+    <div class="cot-hist-body max-h-64 overflow-y-auto mb-4"></div>
+    <button onclick="cerrarModal('modal-historial-cot')" class="btn-outline w-full text-xs">Cerrar</button>
+  </div>
+</div>
 
 </body>
 </html>
