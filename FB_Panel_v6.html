@@ -1636,6 +1636,16 @@ function irEdicion() { abrirEdicion(); }
 // ════════════════════════════════
 function renderSeguimiento() {
   const p = S.pedido; if (!p) return;
+
+  // Auto-marcar alta-epicor si es PG (no requiere factura → no requiere alta en EPICOR)
+  const esPGAuto = (p.razonSocial||'').toUpperCase() === 'PUBLICO EN GENERAL'
+    || S.pasos['fac-anticipo']?.noAplica;
+  if (esPGAuto && !S.pasos['alta-epicor']?.ok) {
+    const ts = new Date().toLocaleString('es-MX');
+    S.pasos['alta-epicor'] = { ok: true, ts, auto: true };
+    apiPost({ action:'marcarPaso', fbk:p.id, paso:'alta-epicor',
+      valor:true, ts, quien:'Sistema (auto-PG)' });
+  }
   document.getElementById('seg-vacio').style.display = 'none';
   document.getElementById('seg-contenido').style.display = 'block';
 
@@ -1809,25 +1819,47 @@ function renderPasos() {
       })(),
     },
     { id:'pago', num:'3', titulo:'Gestionar pago', icono: p.formaPago?.includes('TDC') ? '💳' : '🏦',
-      sub: p.formaPago?.includes('TDC') ? 'Generar link CLIP' : 'Compartir datos de transferencia',
+      sub: ps['pago']?.ok ? 'Pago confirmado por CxC' : (p.formaPago?.includes('TDC') ? 'Generar link CLIP' : 'Compartir datos de transferencia'),
       done: !!(ps['pago']?.ok),
-      accion: () => gestionarPago(),
-      accionLabel: p.formaPago?.includes('TDC') ? 'Abrir CLIP' : 'Ver datos',
+      accion: ps['pago']?.ok ? null : () => gestionarPago(),
+      accionLabel: ps['pago']?.ok ? null : (p.formaPago?.includes('TDC') ? 'Abrir CLIP' : 'Ver datos'),
+      campoExtra: (() => {
+        const yaOk = !!(ps['pago']?.ok);
+        return `<div class="flex items-center gap-3 mt-3">
+          <input type="checkbox" id="chk-pago-cxc" ${yaOk?'checked disabled':''}
+            onchange="confirmarPagoCxC(this)">
+          <label for="chk-pago-cxc" class="text-xs font-bold text-fb-dark ${yaOk?'opacity-50':'cursor-pointer'}">
+            ✅ Pago confirmado por CxC
+          </label>
+        </div>`;
+      })(),
     },
-    { id:'diseno-gmail', num:'4a', titulo:'Solicitar diseño a Nelly', icono:'🎨',
-      sub: deseño ? 'Correo al diseñador con tabla de productos' : 'No aplica — sin personalización',
+    { id:'diseno-gmail', num:'4a', titulo:'Solicitar diseño al diseñador', icono:'🎨',
+      sub: ps['diseno-gmail']?.noAplica ? 'No requiere intervención del diseñador' :
+           !deseño ? 'No aplica — sin personalización' : 'Correo al diseñador con tabla de productos',
       done: !deseño || !!(ps['diseno-gmail']?.ok),
       locked: !deseño,
-      accion: deseño ? () => gmailDiseno() : null,
-      accionLabel: deseño ? 'Abrir Gmail' : '— No aplica',
+      accion: (deseño && !ps['diseno-gmail']?.ok && !ps['diseno-gmail']?.noAplica) ? () => gmailDiseno() : null,
+      accionLabel: 'Abrir Gmail',
+      campoExtra: deseño ? (() => {
+        const yaOk = !!(ps['diseno-gmail']?.ok);
+        const noApl = !!(ps['diseno-gmail']?.noAplica);
+        return `<div class="flex items-center gap-3 mt-3">
+          <input type="checkbox" id="chk-no-disenador" ${(yaOk&&noApl)||(!yaOk&&noApl)?'checked':''} ${yaOk&&!noApl?'disabled':''}
+            onchange="toggleNoRequiereDiseñador(this)">
+          <label for="chk-no-disenador" class="text-xs font-bold text-fb-dark ${yaOk&&!noApl?'opacity-50':'cursor-pointer'}">
+            No requiere intervención del diseñador
+          </label>
+        </div>`;
+      })() : null,
     },
     { id:'diseno-aprobado', num:'4b', titulo:'Diseño aprobado por cliente', icono:'✅',
       sub: 'Marca cuando el cliente confirme el diseño',
       done: !deseño || !!(ps['diseno-aprobado']?.ok),
-      locked: !deseño || !ps['diseno-gmail']?.ok,
+      locked: !deseño || (!ps['diseno-gmail']?.ok && !ps['diseno-gmail']?.noAplica),
       accion: deseño ? () => marcarPaso('diseno-aprobado') : null,
       accionLabel: 'Marcar aprobado',
-      tooltip: deseño && !ps['diseno-gmail']?.ok ? 'Primero solicita el diseño a Nelly (paso 4a)' : null,
+      tooltip: deseño && !ps['diseno-gmail']?.ok && !ps['diseno-gmail']?.noAplica ? 'Primero solicita el diseño o marca que no requiere diseñador (paso 4a)' : null,
     },
     { id:'ov', num:'5', titulo:'OV en EPICOR', icono:'🔢',
       sub: tieneOV ? 'OV: ' + p.ovEpicor : 'Ingresa la OV en el campo de arriba',
@@ -2134,8 +2166,14 @@ function confirmarEnvioProduccion() {
   const dir = (!p.dirEnvio || p.dirEnvio === 'PENDIENTE')
     ? 'PENDIENTE — se enviará en respuesta a este correo'
     : `${p.dirEnvio}, ${p.ciudadEnvio||''}, ${p.estadoEnvio||''} C.P. ${p.cpEnvio||''}`;
-  const prods = (p.productos||[]).map(pr =>
-    `${(pr.sku||'').padEnd(10)}|  ${String(pr.cantActual||pr.cantOriginal||0).padStart(3)}  | ${pr.descripcion||''}`).join('\n');
+  const aplicaTransfProd = (p.grabado === 'Sí' || p.nombresIndividuales === 'Sí' || p.nombresPorVaso === 'Sí');
+  const prods = (p.productos||[]).map(pr => {
+    const skuOrig   = (pr.sku||'').toString().trim();
+    const transf    = aplicaTransfProd ? (MAPA_TRANSFORMACIONES[skuOrig.toUpperCase()]||null) : null;
+    const skuFinal  = transf?.skuProd  || skuOrig;
+    const descFinal = transf?.descProd || pr.descripcion || '';
+    return `${skuFinal.padEnd(10)}|  ${String(pr.cantActual||pr.cantOriginal||0).padStart(3)}  | ${descFinal}`;
+  }).join('\n');
   const asunto = `PRODUCCIÓN OV ${ov} — ${p.nombreComercial||p.razonSocial}`;
 
   const body =
@@ -2565,6 +2603,47 @@ function actualizarTotalConEnvio() {
 }
 
 // Anticipo modal
+async function toggleNoRequiereDiseñador(el) {
+  const marcar = el.checked;
+  const msg = marcar
+    ? '¿Confirmas que este pedido no requiere intervención del diseñador? Se marcarán los pasos 4a y 4b como completados.'
+    : '¿Confirmas que sí requiere diseñador? Los pasos 4a y 4b se reabrirán.';
+  if (!confirm(msg)) { el.checked = !marcar; return; }
+  const ts = new Date().toLocaleString('es-MX');
+  if (marcar) {
+    S.pasos['diseno-gmail']    = { ok: true, noAplica: true, ts };
+    S.pasos['diseno-aprobado'] = { ok: true, noAplica: true, ts };
+    await apiPost({ action:'marcarPaso', fbk:S.pedido.id, paso:'diseno-gmail',
+      valor:true, noAplica:true, ts, quien:S.asesor.nombre });
+    await apiPost({ action:'marcarPaso', fbk:S.pedido.id, paso:'diseno-aprobado',
+      valor:true, noAplica:true, ts, quien:S.asesor.nombre });
+  } else {
+    delete S.pasos['diseno-gmail'];
+    delete S.pasos['diseno-aprobado'];
+    await apiPost({ action:'marcarPaso', fbk:S.pedido.id, paso:'diseno-gmail',
+      valor:false, ts, quien:S.asesor.nombre });
+    await apiPost({ action:'marcarPaso', fbk:S.pedido.id, paso:'diseno-aprobado',
+      valor:false, ts, quien:S.asesor.nombre });
+  }
+  guardarSession();
+  renderPasos();
+  showToast(marcar ? 'Pasos 4a y 4b marcados — sin diseñador ✅' : 'Pasos 4a y 4b reactivados');
+}
+
+async function confirmarPagoCxC(el) {
+  if (!el.checked) return;
+  if (!confirm('¿Confirmas que CxC validó el pago de este pedido?')) {
+    el.checked = false; return;
+  }
+  const ts = new Date().toLocaleString('es-MX');
+  S.pasos['pago'] = { ok: true, ts };
+  await apiPost({ action:'marcarPaso', fbk:S.pedido.id, paso:'pago',
+    valor:true, ts, quien:S.asesor.nombre });
+  guardarSession();
+  renderPasos();
+  showToast('Pago confirmado por CxC ✅');
+}
+
 async function toggleNoAplicaAnticipo(el) {
   const marcar = el.checked;
   const msg = marcar
