@@ -1896,8 +1896,9 @@ function renderPasos() {
       accion: () => waEnvio(), accionLabel: 'WhatsApp',
       campoExtra: `
         <div class="flex items-center gap-3 mt-3">
-          <input type="checkbox" id="chk-entregado" onchange="marcarEntregado(this)">
-          <label for="chk-entregado" class="text-xs font-bold text-fb-dark cursor-pointer">
+          <input type="checkbox" id="chk-entregado" onchange="marcarEntregado(this)"
+            ${ps['envio']?.ok ? 'checked disabled' : ''}>
+          <label for="chk-entregado" class="text-xs font-bold text-fb-dark ${ps['envio']?.ok ? 'opacity-50' : 'cursor-pointer'}">
             ✅ Marcar como Entregado — registra timestamp y cierra el pedido
           </label>
         </div>`,
@@ -1987,6 +1988,7 @@ async function marcarEntregado(el) {
   marcarPaso('envio');
   guardarSession();
   showToast('¡Pedido marcado como Entregado! 🎉');
+  renderPasos();
   renderSeguimiento();
 }
 
@@ -2199,7 +2201,7 @@ Saludos,`;
 
 function waEnvio() {
   const p = S.pedido;
-  const tel = '52' + (p.telefono||'').replace(/\D/g,'');
+  const tel = '52' + String(p.telefono||'').replace(/\D/g,'');
   const msg = `Hola ${p.nombreContacto||p.nombreComercial}!\n\n¡Tu pedido (${p.id}) esta en camino! En breve recibiras la guia de rastreo.\n\nCualquier duda, estamos a tus ordenes. ¡Gracias por confiar en nosotros!`;
   window.open(`https://wa.me/${tel}?text=${enc(msg)}`,'_blank');
   apiPost({ action:'cambiarEstado', fbk:p.id, estado:'En camino', quien:S.asesor.nombre });
@@ -2209,7 +2211,7 @@ function waEnvio() {
 
 function waPostventa() {
   const p = S.pedido;
-  const tel = '52' + (p.telefono||'').replace(/\D/g,'');
+  const tel = '52' + String(p.telefono||'').replace(/\D/g,'');
   const msg = `Hola ${p.nombreContacto||p.nombreComercial}!\n\n¡Esperamos que hayas recibido tu pedido en perfectas condiciones!\n\nNos encantaria saber tu opinion:\n- ¿Quedaste satisfecho con los productos?\n- ¿El proceso fue facil?\n\nSi tienes fotos del resultado, ¡nos encantaria verlas! Etiquetanos en Instagram @fbdrinkware o en Facebook como FB DRINKWARE.\n\n¡Gracias por ser parte de la familia FB Drinkware!`;
   window.open(`https://wa.me/${tel}?text=${enc(msg)}`,'_blank');
   marcarPaso('postventa');
@@ -2361,7 +2363,7 @@ async function confirmarCancelacion() {
 
 function waCancelacion(motivo) {
   const p = S.pedido;
-  const tel = '52' + (p.telefono||'').replace(/\D/g,'');
+  const tel = '52' + String(p.telefono||'').replace(/\D/g,'');
   const msg = `Hola ${p.nombreContacto||p.nombreComercial},\n\nLamentamos informarte que tu pedido (${p.id}) ha sido cancelado.\n\nMotivo: ${motivo}\n\nSi tienes alguna duda o deseas hacer un nuevo pedido, con gusto te atendemos.\n\nGracias por tu comprension.\n\n— Equipo FB Drinkware`;
   window.open(`https://wa.me/${tel}?text=${enc(msg)}`,'_blank');
 }
