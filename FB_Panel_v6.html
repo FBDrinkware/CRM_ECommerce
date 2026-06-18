@@ -6,6 +6,8 @@
 <title>FB Drinkware · Panel v2</title>
 <script src="https://cdn.tailwindcss.com"></script>
 <script>tailwind.config={theme:{extend:{colors:{fb:{dark:'#184273',mid:'#566876',silver:'#b1afaf',light:'#bcbbba',cream:'#f1f0f0'}}}}}</script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.min.js"></script>
+<script>if(typeof pdfjsLib!=='undefined')pdfjsLib.GlobalWorkerOptions.workerSrc='https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.worker.min.js';</script>
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;900&display=swap');
 *{box-sizing:border-box}body{font-family:'Inter',sans-serif;background:#f1f0f0;margin:0}
@@ -351,9 +353,8 @@
           <div id="csf-preview" class="mt-1 text-fb-dark font-bold text-xs"></div>
         </div>
         <input type="file" id="inp-csf" accept=".pdf" style="display:none" onchange="previewCSF(this)">
-        <button onclick="extraerCSF()" id="btn-extraer-csf" class="btn-outline text-xs mt-2" style="display:none">
-          🔍 Extraer datos automáticamente de la CSF
-        </button>
+        <div id="csf-resultado" class="alert-ok text-xs mt-2" style="display:none"></div>
+        <div id="csf-error" class="alert-error text-xs mt-2" style="display:none"></div>
       </div>
     </div>
 
@@ -1346,7 +1347,8 @@ function resetFormulario() {
   const sels = ['f-regimen','f-cfdi','f-metodo-sat','f-forma-pago','f-entrega','f-grabado','f-nombres'];
   sels.forEach(id => { const el = document.getElementById(id); if(el) el.value = ''; });
   document.getElementById('csf-preview').textContent = '';
-  document.getElementById('btn-extraer-csf').style.display = 'none';
+  document.getElementById('csf-resultado').style.display = 'none';
+  document.getElementById('csf-error').style.display = 'none';
   S.csfFile = null;
   const chk = document.getElementById('chk-publico-general');
   if(chk) { chk.checked = false; togglePublicoGeneral(chk); }
@@ -1519,16 +1521,125 @@ function previewCSF(input) {
   if (!input.files[0]) return;
   S.csfFile = input.files[0];
   document.getElementById('csf-preview').textContent = '✅ ' + input.files[0].name;
-  document.getElementById('btn-extraer-csf').style.display = 'block';
+  document.getElementById('csf-resultado').style.display = 'none';
+  document.getElementById('csf-error').style.display = 'none';
+  extraerCSF();
 }
 
 async function extraerCSF() {
-  if (!S.csfFile) return;
-  showToast('Extrayendo datos de la CSF...');
-  // OCR básico: leer texto del PDF via FileReader
-  const b64 = await fileToBase64(S.csfFile);
-  // Intentar extracción via Apps Script (el backend usa DriveApp para leer texto del PDF)
-  showToast('⚠️ Verifica que los datos extraídos sean correctos antes de continuar.', 'warn');
+  if (!S.csfFile || typeof pdfjsLib === 'undefined') return;
+  const resDiv = document.getElementById('csf-resultado');
+  const errDiv = document.getElementById('csf-error');
+  resDiv.style.display = 'none';
+  errDiv.style.display = 'none';
+
+  try {
+    // Leer el PDF localmente con PDF.js
+    const buffer = await S.csfFile.arrayBuffer();
+    const pdf = await pdfjsLib.getDocument({ data: buffer }).promise;
+    let fullText = '';
+    for (let i = 1; i <= pdf.numPages; i++) {
+      const page = await pdf.getPage(i);
+      const content = await page.getTextContent();
+      fullText += content.items.map(it => it.str).join(' ') + '\n';
+    }
+    const t = fullText.replace(/\s+/g, ' ');
+
+    // ── Helpers de extracción ──────────────────────────────────────────
+    const m = (rx) => { const r = t.match(rx); return r && r[1] ? r[1].trim() : ''; };
+
+    // ── Campos de identidad ────────────────────────────────────────────
+    const rfc             = m(/RFC:\s+([A-Z&Ñ]{3,4}\d{6}[A-Z0-9]{3})/i);
+    const razonSocial     = m(/Denominación\/Razón Social:\s+(.*?)(?=\s+Régimen Capital:|\s+Nombre Comercial:|$)/i);
+    let   nombreComercial = m(/Nombre Comercial:\s+(.*?)(?=\s+Fecha inicio|\s+Estatus|$)/i);
+    // Si persona física y nombre comercial vacío → usar razón social
+    if (!nombreComercial && rfc && rfc.length === 13) nombreComercial = razonSocial;
+
+    // ── Régimen fiscal (página 2 — primera entrada en tabla Regímenes) ─
+    const regRaw = m(/Regímenes:\s*Régimen\s+Fecha Inicio\s+Fecha Fin\s+(.*?)\s+\d{2}\/\d{2}\/\d{4}/i);
+    const REGIMENES = {
+      'General de Ley Personas Morales':               '601 - Régimen General de Ley Personas Morales',
+      'Simplificado de Ley Personas Morales':          '602 - Régimen Simplificado de Ley Personas Morales',
+      'Personas Morales con Fines No Lucrativos':      '603 - Personas Morales con Fines No Lucrativos',
+      'Sueldos y Salarios':                            '605 - Régimen de Sueldos y Salarios',
+      'Arrendamiento':                                 '606 - Régimen de Arrendamiento',
+      'Personas Físicas con Actividades Empresariales':'612 - Personas Físicas con Actividades Empresariales',
+      'Incorporación Fiscal':                          '621 - Régimen de Incorporación Fiscal',
+      'Actividades Empresariales con Plataformas':     '625 - Actividades Empresariales con Plataformas Tecnológicas',
+      'Simplificado de Confianza':                     '626 - Régimen Simplificado de Confianza',
+    };
+    let regimenVal = '';
+    if (regRaw) {
+      for (const [key, val] of Object.entries(REGIMENES)) {
+        const palabras = key.toLowerCase().split(' ').slice(-2).join(' ');
+        if (regRaw.toLowerCase().includes(palabras)) { regimenVal = val; break; }
+      }
+    }
+
+    // ── Dirección fiscal ───────────────────────────────────────────────
+    const cp         = m(/Código Postal:\s*(\d{5})/i);
+    const tipoVial   = m(/Tipo de Vialidad:\s*(.*?)(?=\s+Nombre de Vialidad:|$)/i);
+    const nombreVial = m(/Nombre de Vialidad:\s*(.*?)(?=\s+Número Exterior:|$)/i);
+    const numExt     = m(/Número Exterior:\s*(.*?)(?=\s+Número Interior:|$)/i);
+    const numInt     = m(/Número Interior:\s*(.*?)(?=\s+Nombre de la Colonia:|$)/i);
+    const colonia    = m(/Nombre de la Colonia:\s*(.*?)(?=\s+Nombre de la Localidad:|$)/i);
+    const ciudad     = m(/Nombre de la Localidad:\s*(.*?)(?=\s+Nombre del Municipio|$)/i);
+    const municipio  = m(/Nombre del Municipio.*?:\s*(.*?)(?=\s+Nombre de la Entidad|$)/i);
+    const estado     = m(/Nombre de la Entidad Federativa:\s*(.*?)(?=\s+Entre Calle:|$)/i);
+
+    // Construir domicilio fiscal completo en un solo campo
+    const domPartes = [];
+    if (tipoVial && nombreVial) domPartes.push(tipoVial + ' ' + nombreVial);
+    else if (nombreVial) domPartes.push(nombreVial);
+    if (numExt)                        domPartes.push('Núm. ' + numExt);
+    if (numInt && numInt.trim())        domPartes.push('Int. ' + numInt.trim());
+    if (colonia)                        domPartes.push(colonia);
+    const domFiscal = domPartes.join(', ');
+
+    // ── Llenar campos del panel ────────────────────────────────────────
+    const set = (id, val) => { const el = document.getElementById(id); if (el && val) el.value = val; };
+    // Identidad
+    set('f-rfc',       rfc);
+    set('f-razon',     razonSocial);
+    set('f-comercial', nombreComercial);
+    // Datos fiscales
+    set('f-dom-fiscal',    domFiscal);
+    set('f-ciudad-fiscal', ciudad || municipio);
+    set('f-estado-fiscal', estado);
+    set('f-cp-fiscal',     cp);
+    // Régimen (select)
+    if (regimenVal) {
+      const sel = document.getElementById('f-regimen');
+      if (sel) {
+        for (const opt of sel.options) {
+          if (opt.value === regimenVal) { sel.value = regimenVal; break; }
+        }
+      }
+    }
+
+    // ── Resumen de confirmación ────────────────────────────────────────
+    const extraidos = [
+      rfc          && `RFC: ${rfc}`,
+      razonSocial  && `Razón Social: ${razonSocial}`,
+      cp           && `CP: ${cp}`,
+      estado       && `Estado: ${estado}`,
+      regimenVal   && `Régimen: ${regimenVal.split(' - ')[0]}`,
+    ].filter(Boolean);
+
+    if (extraidos.length === 0) {
+      errDiv.textContent = '⚠️ No se encontraron datos. Verifica que la CSF no sea un escáner.';
+      errDiv.style.display = 'block';
+    } else {
+      resDiv.innerHTML = '✅ Extracción correcta — revisa que los campos sean correctos:<br><span style="font-weight:400">' + extraidos.join(' · ') + '</span>';
+      resDiv.style.display = 'block';
+      showToast('CSF extraída ✅ — revisa los campos', 'ok');
+    }
+
+  } catch (err) {
+    console.error('extraerCSF:', err);
+    errDiv.textContent = '❌ Error al leer el PDF. Asegúrate de que no esté protegido con contraseña.';
+    errDiv.style.display = 'block';
+  }
 }
 
 async function confirmarVenta() {
