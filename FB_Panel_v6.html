@@ -1155,8 +1155,8 @@ function renderLista(lista, contenedorId, esPorAtender) {
       <div class="flex items-start justify-between gap-2 flex-wrap">
         <div>
           <div class="font-mono text-[10px] text-fb-silver">${p.id}</div>
-          <div class="font-bold text-fb-dark text-sm mt-0.5">${p.empresa||p.contacto}</div>
-          <div class="text-xs text-fb-mid">${p.contacto} · ${p.asesorCodigo}</div>
+          <div class="font-bold text-fb-dark text-sm mt-0.5">${/PUBLICO EN GENERAL/i.test(p.empresa||'') ? (p.contacto||p.empresa) : (p.empresa||p.contacto)}</div>
+          <div class="text-xs text-fb-mid">${/PUBLICO EN GENERAL/i.test(p.empresa||'') ? (p.empresa||'') : (p.contacto||'')} · ${p.asesorCodigo}</div>
         </div>
         <div class="flex flex-col items-end gap-1">
           <span class="badge ${badgeCls}">${p.estado}</span>
@@ -1257,7 +1257,8 @@ function renderPendientesPorEtapa(todos) {
       <span class="text-fb-silver font-normal ml-1">(${items.length})</span>
     </div>`;
     out += items.map(p => {
-      const nombre = p.empresa || p.contacto || p.id;
+      const esPG   = /PUBLICO EN GENERAL/i.test(p.empresa||'');
+      const nombre = esPG ? (p.contacto || p.empresa || p.id) : (p.empresa || p.contacto || p.id);
       const montoNum = Number(p.subtotal) || 0;
       const montoStr = montoNum > 0
         ? '$' + montoNum.toLocaleString('es-MX', {minimumFractionDigits:0, maximumFractionDigits:0})
@@ -1267,7 +1268,7 @@ function renderPendientesPorEtapa(todos) {
           <div>
             <div class="font-mono text-[10px] text-fb-silver">${p.id}</div>
             <div class="font-bold text-fb-dark text-sm">${nombre}</div>
-            <div class="text-xs text-fb-mid">${p.contacto||''} · ${p.asesorCodigo||''}</div>
+            <div class="text-xs text-fb-mid">${esPG ? (p.empresa||'') : (p.contacto||'')} · ${p.asesorCodigo||''}</div>
           </div>
           <div class="flex flex-col items-end gap-1">
             <span class="badge ${badgeEstado(p.estado)} text-[10px]">${p.estado}</span>
@@ -2944,8 +2945,8 @@ function renderCerrados(lista) {
       <div class="flex items-start justify-between gap-2">
         <div>
           <div class="font-mono text-[10px] text-fb-silver">${p.id}</div>
-          <div class="font-bold text-fb-dark text-sm">${p.empresa||p.contacto}</div>
-          <div class="text-xs text-fb-mid">${p.contacto} · ${p.asesorCodigo}</div>
+          <div class="font-bold text-fb-dark text-sm">${/PUBLICO EN GENERAL/i.test(p.empresa||'') ? (p.contacto||p.empresa) : (p.empresa||p.contacto)}</div>
+          <div class="text-xs text-fb-mid">${/PUBLICO EN GENERAL/i.test(p.empresa||'') ? (p.empresa||'') : (p.contacto||'')} · ${p.asesorCodigo}</div>
         </div>
         <span class="badge ${badgeCls} text-[10px]">${p.estado}</span>
       </div>
