@@ -81,6 +81,15 @@
 .upload-zone.drag-over{border-color:#184273;background:#EBF2FA}
 .seccion-pendiente{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;padding:8px 0 6px;color:#566876;display:flex;align-items:center;gap:6px;margin-top:12px;border-top:1px solid #e5e7eb}
 .seccion-pendiente:first-child{margin-top:0;border-top:none}
+.badge-fria{background:#e0e7ef;color:#334e68;font-size:10px;font-weight:700;padding:3px 10px;border-radius:10px;display:inline-block}
+.card-fria{border-left:3px solid #7b9bb5;background:#f0f4f8;border-radius:12px;padding:12px 14px;margin-bottom:8px;border:1px solid #d1dde8;border-left-width:3px}
+.cot-extra-row{display:flex;align-items:center;gap:8px;padding:10px 12px;border:1px solid #e5e7eb;border-radius:12px;background:#f8fafc;margin-bottom:8px}
+.cot-extra-toggle{width:36px;height:20px;border-radius:10px;border:none;cursor:pointer;position:relative;transition:background .2s;flex-shrink:0}
+.cot-extra-toggle.on{background:#184273}
+.cot-extra-toggle.off{background:#d1d5db}
+.cot-extra-toggle::after{content:'';position:absolute;width:14px;height:14px;border-radius:50%;background:white;top:3px;transition:left .2s}
+.cot-extra-toggle.on::after{left:19px}
+.cot-extra-toggle.off::after{left:3px}
 /* ── CHECKLIST PRIMER CONTACTO ── */
 .pc-acordeon-btn{width:100%;background:none;border:none;cursor:pointer;padding:0;text-align:left}
 .pc-acordeon-btn:hover .pc-header{background:#EBF2FA;border-radius:12px}
@@ -175,6 +184,11 @@
   <div class="card" id="card-cerrados" style="display:none">
     <div class="seccion">✅ Cerrados este mes (Entregados + Cancelados)</div>
     <div id="lista-cerrados"></div>
+  </div>
+  <div class="card" id="card-frias" style="display:none">
+    <div class="seccion" style="color:#334e68;">🧊 Ventas frías</div>
+    <p class="text-xs text-fb-silver mb-3">Pedidos en pausa. Envía un WhatsApp de seguimiento para reactivarlos.</p>
+    <div id="lista-frias"></div>
   </div>
 </div>
 
@@ -512,8 +526,9 @@
       <div id="pasos-contenedor"></div>
     </div>
 
-    <!-- Botón cancelar -->
+    <!-- Botón cancelar + venta fría -->
     <div class="card">
+      <button onclick="abrirModalVentaFria()" class="w-full text-left text-sm font-bold text-[#334e68] bg-[#e0e7ef] hover:bg-[#cfd8e3] border border-[#b8c9d9] rounded-xl px-4 py-3 mb-2 transition-all">🧊 Marcar como venta fría</button>
       <button onclick="abrirModalCancelar()" class="btn-danger w-full">❌ Cancelar pedido</button>
     </div>
   </div>
@@ -570,6 +585,30 @@
     <button onclick="cotAgregarLinea()" class="btn-outline text-xs w-full">+ Agregar producto</button>
   </div>
 
+  <!-- Cargos adicionales fijos -->
+  <div class="card mb-3">
+    <div class="seccion">Cargos adicionales</div>
+
+    <!-- Gastos de envío -->
+    <div class="cot-extra-row">
+      <button id="toggle-envio" class="cot-extra-toggle off" onclick="cotToggleEnvio()" title="Activar/desactivar gasto de envío"></button>
+      <div class="flex-1">
+        <div class="text-xs font-bold text-fb-dark">Gastos de envío</div>
+        <div class="text-[10px] text-fb-silver">Costo aproximado — puede variar sin previo aviso</div>
+      </div>
+      <div id="envio-campos" style="display:none;" class="flex items-center gap-2">
+        <span class="text-xs text-fb-silver">$</span>
+        <input type="number" id="cot-envio-monto" min="0" step="10" value="0" placeholder="0.00"
+          class="border border-fb-light rounded-lg px-2 py-1.5 text-xs outline-none w-24"
+          oninput="cotRecalcular()">
+      </div>
+    </div>
+
+    <!-- Otros cargos (múltiples) -->
+    <div id="cot-otros" class="space-y-2 mb-2"></div>
+    <button onclick="cotAgregarOtroCargo()" class="btn-outline text-xs w-full mt-1">+ Agregar otro cargo</button>
+  </div>
+
   <!-- Descuentos y totales -->
   <div class="card mb-3">
     <div class="seccion">Totales</div>
@@ -585,6 +624,8 @@
       <span class="text-right font-bold" id="cot-sub">$0.00</span>
       <span class="text-fb-silver text-right text-xs">Descuento:</span>
       <span class="text-right text-red-500" id="cot-desc-monto">$0.00</span>
+      <span class="text-fb-silver text-right text-xs" id="lbl-envio-tot" style="display:none">Gastos de envío:</span>
+      <span class="text-right text-fb-mid" id="cot-envio-tot" style="display:none">$0.00</span>
       <span class="text-fb-silver text-right text-xs">IVA (16%):</span>
       <span class="text-right" id="cot-iva">$0.00</span>
       <span class="text-fb-dark font-bold text-right text-xs">TOTAL c/IVA:</span>
@@ -630,6 +671,38 @@
     <div class="flex gap-3">
       <button onclick="confirmarCancelacion()" class="btn-danger flex-1">Cancelar pedido</button>
       <button onclick="cerrarModal('modal-cancelar')" class="btn-outline flex-1">Volver</button>
+    </div>
+  </div>
+</div>
+
+<!-- ══ MODAL VENTA FRÍA ══ -->
+<div class="modal-overlay" id="modal-venta-fria" style="display:none">
+  <div class="modal-box">
+    <h3 class="font-black text-[#184273] text-base mb-1">🧊 Marcar como venta fría</h3>
+    <p class="text-xs text-fb-silver mb-4">El pedido se moverá a la sección "Ventas frías". Podrás reactivarlo en cualquier momento enviando un WhatsApp de seguimiento.</p>
+    <div class="campo mb-4">
+      <label>Motivo (opcional)</label>
+      <textarea id="inp-motivo-fria" placeholder="Ej: Cliente pidió tiempo para decidir..." style="min-height:70px"></textarea>
+    </div>
+    <div class="flex gap-3">
+      <button onclick="confirmarVentaFria()" class="w-full font-bold text-white border-none rounded-xl px-4 py-3 cursor-pointer text-sm" style="background:#334e68;">🧊 Confirmar — marcar como fría</button>
+    </div>
+    <button onclick="cerrarModal('modal-venta-fria')" class="w-full text-fb-silver text-xs font-bold mt-3 bg-transparent border-none cursor-pointer">Cancelar</button>
+  </div>
+</div>
+
+<!-- ══ MODAL WA RECUPERACIÓN ══ -->
+<div class="modal-overlay" id="modal-wa-fria" style="display:none">
+  <div class="modal-box">
+    <h3 class="font-black text-fb-dark text-base mb-1">💬 WhatsApp de seguimiento</h3>
+    <p class="text-xs text-fb-silver mb-3">Edita el mensaje antes de enviarlo al cliente.</p>
+    <div class="campo mb-3">
+      <label>Mensaje</label>
+      <textarea id="inp-wa-fria" style="min-height:140px;font-size:12px;line-height:1.6"></textarea>
+    </div>
+    <div class="flex gap-3">
+      <button onclick="enviarWaRecuperacion()" class="btn-action btn-wa flex-1 justify-center">Abrir WhatsApp</button>
+      <button onclick="cerrarModal('modal-wa-fria')" class="btn-outline flex-1">Cancelar</button>
     </div>
   </div>
 </div>
@@ -791,7 +864,7 @@ let COT = {
 };
 
 function cotNueva() {
-  COT = { num: null, lineas: [], guardado: false };
+  COT = { num: null, lineas: [], guardado: false, otrosCargos: [] };
   document.getElementById('cot-cliente').value  = '';
   document.getElementById('cot-correo').value   = '';
   document.getElementById('cot-tel').value      = '';
@@ -801,6 +874,15 @@ function cotNueva() {
   document.getElementById('cot-vigencia').value = hoy.toISOString().split('T')[0];
   document.getElementById('cot-num-display').textContent = 'Nueva cotización';
   document.getElementById('cot-status').textContent = '';
+  // Resetear toggle de envío
+  const toggleEnvio = document.getElementById('toggle-envio');
+  if (toggleEnvio) { toggleEnvio.className = 'cot-extra-toggle off'; }
+  const camposEnvio = document.getElementById('envio-campos');
+  if (camposEnvio) camposEnvio.style.display = 'none';
+  const montoEnvio = document.getElementById('cot-envio-monto');
+  if (montoEnvio) montoEnvio.value = '0';
+  // Resetear otros cargos
+  document.getElementById('cot-otros').innerHTML = '';
   cotRenderLineas();
   cotRecalcular();
 }
@@ -883,6 +965,36 @@ function cotTotalLinea(l) {
   return base * (1 - (l.descLinea||0)/100);
 }
 
+function cotToggleEnvio() {
+  const btn = document.getElementById('toggle-envio');
+  const campos = document.getElementById('envio-campos');
+  const isOn = btn.classList.contains('on');
+  btn.className = 'cot-extra-toggle ' + (isOn ? 'off' : 'on');
+  campos.style.display = isOn ? 'none' : 'flex';
+  if (isOn) document.getElementById('cot-envio-monto').value = '0';
+  cotRecalcular();
+}
+
+function cotAgregarOtroCargo() {
+  const cont = document.getElementById('cot-otros');
+  const idx  = cont.children.length;
+  const div  = document.createElement('div');
+  div.className = 'cot-extra-row';
+  div.id = `otro-cargo-${idx}`;
+  div.innerHTML = `
+    <div class="flex-1 flex gap-2 items-center">
+      <input type="text" placeholder="Descripción del cargo" id="otro-desc-${idx}"
+        class="flex-1 border border-fb-light rounded-lg px-2 py-1.5 text-xs outline-none"
+        oninput="cotRecalcular()">
+      <span class="text-xs text-fb-silver flex-shrink-0">$</span>
+      <input type="number" min="0" step="10" value="0" id="otro-monto-${idx}"
+        class="border border-fb-light rounded-lg px-2 py-1.5 text-xs outline-none w-24"
+        oninput="cotRecalcular()">
+    </div>
+    <button onclick="this.parentElement.remove();cotRecalcular()" class="text-red-400 text-xs flex-shrink-0 ml-1">✕</button>`;
+  cont.appendChild(div);
+}
+
 function cotRecalcular() {
   const descGlobal = Number(document.getElementById('cot-desc-global')?.value)||0;
   const fmt = n => n.toLocaleString('es-MX',{minimumFractionDigits:2});
@@ -893,14 +1005,38 @@ function cotRecalcular() {
     const el = document.getElementById(`cot-linea-total-${i}`);
     if (el) el.textContent = '$' + fmt(t);
   });
-  const descMonto   = subConIVA * descGlobal / 100;
-  const neto        = subConIVA - descMonto;
-  const subSinIVA   = neto / 1.16;
-  const iva         = neto - subSinIVA;
-  document.getElementById('cot-sub').textContent       = '$' + fmt(subSinIVA);
-  document.getElementById('cot-desc-monto').textContent= descMonto>0 ? '-$'+fmt(descMonto/1.16) : '$0.00';
-  document.getElementById('cot-iva').textContent       = '$' + fmt(iva);
-  document.getElementById('cot-total').textContent     = '$' + fmt(neto);
+
+  // Envío (sin IVA, se suma como monto plano)
+  const toggleOn = document.getElementById('toggle-envio')?.classList.contains('on');
+  const montoEnvio = toggleOn ? (Number(document.getElementById('cot-envio-monto')?.value)||0) : 0;
+
+  // Otros cargos
+  let montoOtros = 0;
+  document.querySelectorAll('#cot-otros .cot-extra-row').forEach(row => {
+    const idx = row.id.replace('otro-cargo-','');
+    montoOtros += Number(document.getElementById(`otro-monto-${idx}`)?.value)||0;
+  });
+
+  const descMonto  = subConIVA * descGlobal / 100;
+  const netoProds  = subConIVA - descMonto;
+  const subSinIVA  = netoProds / 1.16;
+  const iva        = netoProds - subSinIVA;
+  const total      = netoProds + montoEnvio + montoOtros;
+
+  document.getElementById('cot-sub').textContent        = '$' + fmt(subSinIVA);
+  document.getElementById('cot-desc-monto').textContent = descMonto>0 ? '-$'+fmt(descMonto/1.16) : '$0.00';
+  document.getElementById('cot-iva').textContent        = '$' + fmt(iva);
+  document.getElementById('cot-total').textContent      = '$' + fmt(total);
+
+  // Mostrar/ocultar fila de envío en totales
+  const lblEnvio = document.getElementById('lbl-envio-tot');
+  const monEnvio = document.getElementById('cot-envio-tot');
+  if (lblEnvio && monEnvio) {
+    const vis = montoEnvio > 0 ? 'block' : 'none';
+    lblEnvio.style.display = vis;
+    monEnvio.style.display = vis;
+    monEnvio.textContent = '$' + fmt(montoEnvio) + ' *';
+  }
 }
 
 async function cotGuardar() {
@@ -908,6 +1044,18 @@ async function cotGuardar() {
   if (!cliente) { showToast('Ingresa el nombre del cliente'); return; }
   if (COT.lineas.length===0) { showToast('Agrega al menos un producto'); return; }
   document.getElementById('cot-status').textContent = 'Guardando...';
+
+  // Recopilar cargos extra
+  const toggleOn = document.getElementById('toggle-envio')?.classList.contains('on');
+  const montoEnvio = toggleOn ? (Number(document.getElementById('cot-envio-monto')?.value)||0) : 0;
+  const otrosCargos = [];
+  document.querySelectorAll('#cot-otros .cot-extra-row').forEach(row => {
+    const idx   = row.id.replace('otro-cargo-','');
+    const desc  = document.getElementById(`otro-desc-${idx}`)?.value?.trim() || 'Otro cargo';
+    const monto = Number(document.getElementById(`otro-monto-${idx}`)?.value)||0;
+    if (monto > 0) otrosCargos.push({ desc, monto });
+  });
+
   const res = await apiPost({
     action:   'guardarCotizacion',
     asesor:   S.asesor.correo,
@@ -919,6 +1067,8 @@ async function cotGuardar() {
     nota:     document.getElementById('cot-nota').value,
     descGlobal: Number(document.getElementById('cot-desc-global').value)||0,
     lineas:   COT.lineas,
+    gastoEnvio: montoEnvio,
+    otrosCargos,
     total:    document.getElementById('cot-total').textContent,
     numExistente: COT.num || null,
   });
@@ -1009,10 +1159,22 @@ function cotGenerarPDF() {
   // Calcular totales
   let subConIVA = 0;
   COT.lineas.forEach(l => { subConIVA += cotTotalLinea(l); });
-  const descMonto   = subConIVA * descG / 100;
-  const neto        = subConIVA - descMonto;
-  const subSinIVA   = neto / 1.16;
-  const iva         = neto - subSinIVA;
+  const descMonto  = subConIVA * descG / 100;
+  const netoProds  = subConIVA - descMonto;
+  const subSinIVA  = netoProds / 1.16;
+  const iva        = netoProds - subSinIVA;
+
+  // Cargos extra
+  const toggleOn = document.getElementById('toggle-envio')?.classList.contains('on');
+  const montoEnvio = toggleOn ? (Number(document.getElementById('cot-envio-monto')?.value)||0) : 0;
+  const otrosCargos = [];
+  document.querySelectorAll('#cot-otros .cot-extra-row').forEach(row => {
+    const idx   = row.id.replace('otro-cargo-','');
+    const desc  = document.getElementById(`otro-desc-${idx}`)?.value?.trim() || 'Otro cargo';
+    const monto = Number(document.getElementById(`otro-monto-${idx}`)?.value)||0;
+    if (monto > 0) otrosCargos.push({ desc, monto });
+  });
+  const total = netoProds + montoEnvio + otrosCargos.reduce((s,c)=>s+c.monto,0);
 
   // Generar tabla de productos HTML
   const filasProds = COT.lineas.map((l,i) => {
@@ -1088,8 +1250,11 @@ function cotGenerarPDF() {
       <div class="tot-row"><span>Subtotal s/IVA</span><span>$${fmt(subSinIVA)}</span></div>
       ${descMonto>0?`<div class="tot-row"><span>Descuento (${descG}%)</span><span>-$${fmt(descMonto/1.16)}</span></div>`:''}
       <div class="tot-row"><span>IVA (16%)</span><span>$${fmt(iva)}</span></div>
-      <div class="tot-row final"><span>TOTAL</span><span>$${fmt(neto)}</span></div>
+      ${montoEnvio>0?`<div class="tot-row"><span>Gastos de envío *</span><span>$${fmt(montoEnvio)}</span></div>`:''}
+      ${otrosCargos.map(c=>`<div class="tot-row"><span>${c.desc}</span><span>$${fmt(c.monto)}</span></div>`).join('')}
+      <div class="tot-row final"><span>TOTAL</span><span>$${fmt(total)}</span></div>
     </div>
+    ${montoEnvio>0?`<p style="font-size:9px;color:#999;margin-top:6px">* Gastos de envío estimados. Sujetos a cambios sin previo aviso.</p>`:''}
     ${nota?`<div class="nota"><div class="nota-title">Nota</div><div class="nota-text">${nota}</div></div>`:''}
     <div class="footer">
       <span class="footer-txt">${num} · Generado ${new Date().toLocaleDateString('es-MX')}</span>
@@ -1141,6 +1306,7 @@ async function cargarPendientes() {
   const todos = [...(res.porAtender||[]), ...(res.enProceso||[])];
   renderPendientesPorEtapa(todos);
   renderCerrados(res.cerradosMes||[]);
+  renderFrias(res.ventasFrias||[]);
 }
 
 function renderLista(lista, contenedorId, esPorAtender) {
@@ -2952,6 +3118,105 @@ function renderCerrados(lista) {
       </div>
     </div>`;
   }).join('');
+}
+
+// ════════════════════════════════════════════════════════
+// VENTA FRÍA
+// ════════════════════════════════════════════════════════
+
+function renderFrias(lista) {
+  const card = document.getElementById('card-frias');
+  const div  = document.getElementById('lista-frias');
+  if (!lista || !lista.length) { card.style.display = 'none'; return; }
+  card.style.display = 'block';
+  div.innerHTML = lista.map(p => {
+    const esPG = /PUBLICO EN GENERAL/i.test(p.empresa||'');
+    const nombreGrande = esPG ? (p.contacto||p.empresa) : (p.empresa||p.contacto);
+    const nombreChico  = esPG ? (p.empresa||'') : (p.contacto||'');
+    return `<div class="card-fria">
+      <div class="flex items-start justify-between gap-2 mb-2">
+        <div>
+          <div class="font-mono text-[10px] text-fb-silver">${p.id}</div>
+          <div class="font-bold text-sm" style="color:#334e68">${nombreGrande}</div>
+          <div class="text-xs text-fb-mid">${nombreChico} · ${p.asesorCodigo}</div>
+        </div>
+        <span class="badge-fria">🧊 Fría</span>
+      </div>
+      <div class="flex gap-2 flex-wrap mt-1">
+        <button onclick="abrirWaRecuperacion('${p.id}')"
+          class="btn-action btn-wa text-[11px] px-3 py-1.5">💬 Seguimiento WA</button>
+        <button onclick="reactivarFria('${p.id}')"
+          class="btn-outline text-[11px] px-3 py-1.5">↩ Reactivar</button>
+        <button onclick="cargarPedidoDesdeListado('${p.id}')"
+          class="btn-outline text-[11px] px-3 py-1.5">Ver pedido</button>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function abrirModalVentaFria() {
+  if (!S.pedido) return;
+  document.getElementById('inp-motivo-fria').value = '';
+  document.getElementById('modal-venta-fria').style.display = 'flex';
+}
+
+async function confirmarVentaFria() {
+  if (!S.pedido) return;
+  const motivo = document.getElementById('inp-motivo-fria').value.trim();
+  cerrarModal('modal-venta-fria');
+  showLoading('Marcando como venta fría...');
+  await apiPost({
+    action: 'marcarVentaFria',
+    fbk:    S.pedido.id,
+    estadoAnterior: S.pedido.estado,
+    motivo,
+    quien:  S.asesor.nombre,
+  });
+  hideLoading();
+  S.pedido.estado = 'Venta fría';
+  showToast('Pedido marcado como venta fría 🧊');
+  cargarPendientes();
+}
+
+async function reactivarFria(fbk) {
+  if (!confirm('¿Reactivar este pedido? Volverá al estado anterior.')) return;
+  showLoading('Reactivando...');
+  await apiPost({ action: 'reactivarVentaFria', fbk, quien: S.asesor.nombre });
+  hideLoading();
+  showToast('Pedido reactivado ✅');
+  cargarPendientes();
+}
+
+function abrirWaRecuperacion(fbk) {
+  // Buscar datos del pedido en la lista de frías (ya cargada en memoria)
+  // Si no está en memoria, usamos datos mínimos
+  const p = S.pedido?.id === fbk ? S.pedido : null;
+  const nombre  = p ? (p.nombreContacto || p.nombreComercial || p.razonSocial || 'cliente') : 'cliente';
+  const tel     = p ? (p.telefono || '') : '';
+
+  const msgDefecto =
+`Hola ${nombre}, ¿cómo estás?
+
+Te escribo de parte de FB Drinkware. Hace unos días platicamos sobre tu pedido de vasos térmicos personalizados y quería saber si sigues interesado o si tienes alguna duda que podamos resolver.
+
+Quedamos a tus órdenes para ayudarte con lo que necesites.
+
+Saludos,
+${S.asesor?.nombre || 'FB Drinkware'}`;
+
+  document.getElementById('inp-wa-fria').value = msgDefecto;
+  // Guardar tel para usarlo al enviar
+  document.getElementById('modal-wa-fria').dataset.tel = tel;
+  document.getElementById('modal-wa-fria').style.display = 'flex';
+}
+
+function enviarWaRecuperacion() {
+  const tel = document.getElementById('modal-wa-fria').dataset.tel || '';
+  const msg = document.getElementById('inp-wa-fria').value.trim();
+  if (!msg) return;
+  const num = tel ? '52' + tel.replace(/\D/g,'') : WHATSAPP_NUM;
+  window.open(`https://wa.me/${num}?text=${encodeURIComponent(msg)}`, '_blank');
+  cerrarModal('modal-wa-fria');
 }
 
 // ════════════════════════════════════════════════════════
