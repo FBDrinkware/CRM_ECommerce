@@ -182,13 +182,22 @@
     <div id="lista-por-etapa"><p class="text-xs text-fb-silver text-center py-4">Cargando...</p></div>
   </div>
   <div class="card" id="card-cerrados" style="display:none">
-    <div class="seccion">✅ Cerrados este mes (Entregados + Cancelados)</div>
-    <div id="lista-cerrados"></div>
+    <button class="w-full text-left" onclick="toggleSeccion('cerrados')">
+      <div class="flex items-center justify-between">
+        <div class="seccion mb-0">✅ Cerrados este mes <span id="cnt-cerrados" class="text-fb-silver font-normal"></span></div>
+        <svg id="chev-cerrados" xmlns="http://www.w3.org/2000/svg" width="18" height="18" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5" style="transition:transform .2s;flex-shrink:0"><path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7"/></svg>
+      </div>
+    </button>
+    <div id="lista-cerrados" style="display:none;margin-top:10px;"></div>
   </div>
   <div class="card" id="card-frias" style="display:none">
-    <div class="seccion" style="color:#334e68;">🧊 Ventas frías</div>
-    <p class="text-xs text-fb-silver mb-3">Pedidos en pausa. Envía un WhatsApp de seguimiento para reactivarlos.</p>
-    <div id="lista-frias"></div>
+    <button class="w-full text-left" onclick="toggleSeccion('frias')">
+      <div class="flex items-center justify-between">
+        <div class="seccion mb-0" style="color:#334e68;">🧊 Ventas frías <span id="cnt-frias" class="font-normal" style="color:#7b9bb5;"></span></div>
+        <svg id="chev-frias" xmlns="http://www.w3.org/2000/svg" width="18" height="18" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5" style="transition:transform .2s;flex-shrink:0"><path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7"/></svg>
+      </div>
+    </button>
+    <div id="lista-frias" style="display:none;margin-top:10px;"></div>
   </div>
 </div>
 
@@ -3100,11 +3109,24 @@ async function guardarComentario() {
 }
 
 // Render cerrados del mes
+function toggleSeccion(cual) {
+  const lista = document.getElementById('lista-' + cual);
+  const chev  = document.getElementById('chev-' + cual);
+  const abierta = lista.style.display !== 'none';
+  lista.style.display = abierta ? 'none' : 'block';
+  chev.style.transform = abierta ? 'rotate(0deg)' : 'rotate(180deg)';
+}
+
 function renderCerrados(lista) {
   const card = document.getElementById('card-cerrados');
   const div  = document.getElementById('lista-cerrados');
+  const cnt  = document.getElementById('cnt-cerrados');
   if (!lista || !lista.length) { card.style.display = 'none'; return; }
   card.style.display = 'block';
+  if (cnt) cnt.textContent = '(' + lista.length + ')';
+  // Empieza contraído
+  div.style.display = 'none';
+  document.getElementById('chev-cerrados').style.transform = 'rotate(0deg)';
   div.innerHTML = lista.map(p => {
     const badgeCls = badgeEstado(p.estado);
     return `<div class="pendiente-card" onclick="cargarPedidoDesdeListado('${p.id}')">
@@ -3120,15 +3142,16 @@ function renderCerrados(lista) {
   }).join('');
 }
 
-// ════════════════════════════════════════════════════════
-// VENTA FRÍA
-// ════════════════════════════════════════════════════════
-
 function renderFrias(lista) {
   const card = document.getElementById('card-frias');
   const div  = document.getElementById('lista-frias');
+  const cnt  = document.getElementById('cnt-frias');
   if (!lista || !lista.length) { card.style.display = 'none'; return; }
   card.style.display = 'block';
+  if (cnt) cnt.textContent = '(' + lista.length + ')';
+  // Empieza expandido para que el asesor lo vea de inmediato
+  div.style.display = 'block';
+  document.getElementById('chev-frias').style.transform = 'rotate(180deg)';
   div.innerHTML = lista.map(p => {
     const esPG = /PUBLICO EN GENERAL/i.test(p.empresa||'');
     const nombreGrande = esPG ? (p.contacto||p.empresa) : (p.empresa||p.contacto);
