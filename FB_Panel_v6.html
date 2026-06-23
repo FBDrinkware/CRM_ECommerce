@@ -872,6 +872,8 @@ let COT = {
   guardado: false,
 };
 
+let LISTA_FRIAS = []; // cache de ventas frias para WA de recuperacion
+
 function cotNueva() {
   COT = { num: null, lineas: [], guardado: false, otrosCargos: [] };
   document.getElementById('cot-cliente').value  = '';
@@ -3144,6 +3146,7 @@ function renderCerrados(lista) {
 }
 
 function renderFrias(lista) {
+  LISTA_FRIAS = lista || []; // guardar para uso en abrirWaRecuperacion
   const card = document.getElementById('card-frias');
   const div  = document.getElementById('lista-frias');
   const cnt  = document.getElementById('cnt-frias');
@@ -3214,8 +3217,8 @@ async function reactivarFria(fbk) {
 function abrirWaRecuperacion(fbk) {
   // Buscar datos del pedido en la lista de frías (ya cargada en memoria)
   // Si no está en memoria, usamos datos mínimos
-  const p = S.pedido?.id === fbk ? S.pedido : null;
-  const nombre  = p ? (p.nombreContacto || p.nombreComercial || p.razonSocial || 'cliente') : 'cliente';
+  const p = LISTA_FRIAS.find(x => x.id === fbk) || (S.pedido?.id === fbk ? S.pedido : null);
+  const nombre  = p ? (p.contacto || p.empresa || '') : '';
   const tel     = p ? (p.telefono || '') : '';
 
   const msgDefecto =
