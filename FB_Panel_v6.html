@@ -2115,7 +2115,18 @@ function renderPasos() {
       accionLabel: ps['pago']?.ok ? null : (p.formaPago?.includes('TDC') ? 'Abrir CLIP' : 'Ver datos'),
       campoExtra: (() => {
         const yaOk = !!(ps['pago']?.ok);
-        return `<div class="flex items-center gap-3 mt-3">
+        const refGuardada = p.refPago || '';
+        return `<div class="campo mt-3">
+          <label>Referencia de pago <span class="text-red-500">*</span></label>
+          <div class="flex gap-2 items-center mt-1">
+            <input type="text" id="inp-ref-pago" placeholder="Ej: 2345678901"
+              class="flex-1 border border-fb-light rounded-xl px-3 py-2 text-sm outline-none focus:border-fb-dark"
+              value="${refGuardada}" ${yaOk ? 'disabled' : ''}>
+            ${!yaOk ? `<button onclick="guardarRefPago()" class="btn-outline text-xs px-3 py-2 flex-shrink-0">Guardar</button>` : ''}
+          </div>
+          ${refGuardada ? `<div class="text-[10px] text-fb-silver mt-1">Ref. guardada: ${refGuardada}</div>` : ''}
+        </div>
+        <div class="flex items-center gap-3 mt-2">
           <input type="checkbox" id="chk-pago-cxc" ${yaOk?'checked disabled':''}
             onchange="confirmarPagoCxC(this)">
           <label for="chk-pago-cxc" class="text-xs font-bold text-fb-dark ${yaOk?'opacity-50':'cursor-pointer'}">
@@ -2216,14 +2227,27 @@ function renderPasos() {
       locked: !(ps['produccion']?.ok),
       done: !!(ps['envio']?.ok),
       accion: () => waEnvio(), accionLabel: 'WhatsApp',
-      campoExtra: `
-        <div class="flex items-center gap-3 mt-3">
+      campoExtra: (() => {
+        const yaEntregado = !!(ps['envio']?.ok);
+        const numFact = p.numFactura || '';
+        return `<div class="campo mt-3">
+          <label>Factura número</label>
+          <div class="flex gap-2 items-center mt-1">
+            <input type="text" id="inp-num-factura" placeholder="Ej: F-2026-00123"
+              class="flex-1 border border-fb-light rounded-xl px-3 py-2 text-sm outline-none focus:border-fb-dark"
+              value="${numFact}" ${yaEntregado ? 'disabled' : ''}>
+            ${!yaEntregado ? `<button onclick="guardarNumFactura()" class="btn-outline text-xs px-3 py-2 flex-shrink-0">Guardar</button>` : ''}
+          </div>
+          ${numFact ? `<div class="text-[10px] text-fb-silver mt-1">Factura guardada: ${numFact}</div>` : ''}
+        </div>
+        <div class="flex items-center gap-3 mt-2">
           <input type="checkbox" id="chk-entregado" onchange="marcarEntregado(this)"
-            ${ps['envio']?.ok ? 'checked disabled' : ''}>
-          <label for="chk-entregado" class="text-xs font-bold text-fb-dark ${ps['envio']?.ok ? 'opacity-50' : 'cursor-pointer'}">
+            ${yaEntregado ? 'checked disabled' : ''}>
+          <label for="chk-entregado" class="text-xs font-bold text-fb-dark ${yaEntregado ? 'opacity-50' : 'cursor-pointer'}">
             ✅ Marcar como Entregado — registra timestamp y cierra el pedido
           </label>
-        </div>`,
+        </div>`;
+      })(),
     },
     { id:'postventa', num:'8', titulo:'Post-venta', icono:'⭐',
       sub: 'Mensaje de satisfacción al cliente',
@@ -2513,6 +2537,7 @@ Comentarios para almacén: ${comentAlmacen}
 ${'─'.repeat(30)}
 FACTURACIÓN
 ${'─'.repeat(30)}
+Referencia de pago: ${p.refPago||'—'}
 ${notaFactura}
 
 Asesor: ${S.asesor.nombre} (${S.asesor.codigo})
@@ -2922,8 +2947,20 @@ async function toggleNoRequiereDiseñador(el) {
 
 async function confirmarPagoCxC(el) {
   if (!el.checked) return;
+  // Validar que la referencia de pago esté llena
+  const ref = document.getElementById('inp-ref-pago')?.value?.trim() || S.pedido?.refPago || '';
+  if (!ref) {
+    showToast('⚠️ Ingresa la referencia de pago antes de confirmar');
+    el.checked = false; return;
+  }
   if (!confirm('¿Confirmas que CxC validó el pago de este pedido?')) {
     el.checked = false; return;
+  }
+  // Guardar referencia si no se había guardado aún
+  if (!S.pedido.refPago) {
+    await apiPost({ action:'guardarCampoExtra', fbk:S.pedido.id,
+      campo:'REF_PAGO', valor:ref, quien:S.asesor.nombre });
+    S.pedido.refPago = ref;
   }
   const ts = new Date().toLocaleString('es-MX');
   S.pasos['pago'] = { ok: true, ts };
@@ -2932,6 +2969,26 @@ async function confirmarPagoCxC(el) {
   guardarSession();
   renderPasos();
   showToast('Pago confirmado por CxC ✅');
+}
+
+async function guardarRefPago() {
+  const ref = document.getElementById('inp-ref-pago')?.value?.trim();
+  if (!ref) { showToast('Ingresa la referencia de pago'); return; }
+  await apiPost({ action:'guardarCampoExtra', fbk:S.pedido.id,
+    campo:'REF_PAGO', valor:ref, quien:S.asesor.nombre });
+  S.pedido.refPago = ref;
+  showToast('Referencia guardada ✅');
+  renderPasos();
+}
+
+async function guardarNumFactura() {
+  const num = document.getElementById('inp-num-factura')?.value?.trim();
+  if (!num) { showToast('Ingresa el número de factura'); return; }
+  await apiPost({ action:'guardarCampoExtra', fbk:S.pedido.id,
+    campo:'NUM_FACTURA', valor:num, quien:S.asesor.nombre });
+  S.pedido.numFactura = num;
+  showToast('Número de factura guardado ✅');
+  renderPasos();
 }
 
 async function toggleNoAplicaAnticipo(el) {
@@ -3132,14 +3189,19 @@ function renderCerrados(lista) {
   document.getElementById('chev-cerrados').style.transform = 'rotate(0deg)';
   div.innerHTML = lista.map(p => {
     const badgeCls = badgeEstado(p.estado);
+    const totalFmt = p.subtotal ? '$' + Number(p.subtotal).toLocaleString('es-MX',{minimumFractionDigits:0}) : '';
     return `<div class="pendiente-card" onclick="cargarPedidoDesdeListado('${p.id}')">
       <div class="flex items-start justify-between gap-2">
         <div>
           <div class="font-mono text-[10px] text-fb-silver">${p.id}</div>
           <div class="font-bold text-fb-dark text-sm">${/PUBLICO EN GENERAL/i.test(p.empresa||'') ? (p.contacto||p.empresa) : (p.empresa||p.contacto)}</div>
           <div class="text-xs text-fb-mid">${/PUBLICO EN GENERAL/i.test(p.empresa||'') ? (p.empresa||'') : (p.contacto||'')} ${p.ovEpicor ? "· " + p.ovEpicor : ""}</div>
+          ${p.numFactura ? `<div class="text-[10px] text-fb-silver mt-0.5">Factura: ${p.numFactura}</div>` : ''}
         </div>
-        <span class="badge ${badgeCls} text-[10px]">${p.estado}</span>
+        <div class="flex flex-col items-end gap-1">
+          <span class="badge ${badgeCls} text-[10px]">${p.estado}</span>
+          ${totalFmt ? `<span class="text-xs font-bold text-fb-dark">${totalFmt}</span>` : ''}
+        </div>
       </div>
     </div>`;
   }).join('');
