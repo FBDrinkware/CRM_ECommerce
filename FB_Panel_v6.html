@@ -1939,7 +1939,7 @@ function renderSeguimiento() {
     ? (p.nombreContacto || p.nombreComercial || p.empresa || 'Público en General')
     : (p.nombreComercial || p.razonSocial || p.nombreContacto || p.empresa || '—');
   document.getElementById('seg-nombre').textContent = nombreDisplay;
-  document.getElementById('seg-meta').textContent = (p.tipoEntrega||'') + ' · ' + (p.formaPago||'') + (p.fechaLimite ? ' · Límite: '+p.fechaLimite : '');
+  document.getElementById('seg-meta').textContent = (p.tipoEntrega||'') + ' · ' + (p.formaPago||'') + (p.fechaLimite ? ' · Límite: '+fmtFecha(p.fechaLimite) : '');
   document.getElementById('seg-estado-badge').textContent = p.estado;
   document.getElementById('seg-estado-badge').className = 'badge ' + badgeEstado(p.estado);
   const asesorDisplayNom = (p.asesorNombreReal || p.asesorNombre || S.asesor.nombre).split(' ')[0];
@@ -3055,6 +3055,16 @@ function showTab(id, btn) {
 }
 
 function cerrarModal(id) { document.getElementById(id).style.display='none'; }
+
+// Formatea fecha ISO o YYYY-MM-DD a DD/MM/YYYY
+function fmtFecha(f) {
+  if (!f || f === '—') return '—';
+  // Formato ISO: 2026-07-01T05:00:00.000Z
+  const s = f.toString().split('T')[0];
+  const parts = s.split('-');
+  if (parts.length === 3) return `${parts[2]}/${parts[1]}/${parts[0]}`;
+  return f;
+}
 
 function showToast(msg, tipo) {
   const t = document.getElementById('toast');
