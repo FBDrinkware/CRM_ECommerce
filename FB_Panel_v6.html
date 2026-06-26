@@ -1970,7 +1970,7 @@ function renderSeguimiento() {
     ['Entrega',  p.tipoEntrega||'—'],
     ['Dirección envío', pendDir ? 'PENDIENTE' : p.dirEnvio, pendDir],
     ['Forma de pago', p.formaPago||'—'],
-    ['Fecha límite', p.fechaLimite||'—'],
+    ['Fecha límite', fmtFecha(p.fechaLimite)||'—'],
     ['CSF', p.urlCSF ? '✅ Subida' : '—', false, p.urlCSF],
   ];
   document.getElementById('seg-chips').innerHTML = chips.map(([l,val,warn,link]) =>
@@ -2422,7 +2422,7 @@ function gmailDiseno() {
   const body =
 `Hola Nelly,
 
-¿Me ayudarías a hacer el diseño y la ruta de producción para este pedido? Tenemos como fecha límite el ${p.fechaLimite||'—'} para tenerlo listo.
+¿Me ayudarías a hacer el diseño y la ruta de producción para este pedido? Tenemos como fecha límite el ${fmtFecha(p.fechaLimite)||'—'} para tenerlo listo.
 
 Te adjunto las capturas de pantalla de lo que requiere el cliente:
 
@@ -2438,7 +2438,7 @@ CLIENTE
 ${'─'.repeat(30)}
 ${p.nombreComercial||p.razonSocial||'—'}
 Folio: ${p.id}
-Fecha límite: ${p.fechaLimite||'—'}
+Fecha límite: ${fmtFecha(p.fechaLimite)||'—'}
 
 ${'─'.repeat(30)}
 DISEÑO
@@ -2518,7 +2518,7 @@ ${'─'.repeat(30)}
 OV EPICOR:    ${ov}
 Folio:        ${p.id}
 Fecha:        ${new Date().toLocaleDateString('es-MX')}
-Fecha límite: ${p.fechaLimite||'—'}
+Fecha límite: ${fmtFecha(p.fechaLimite)||'—'}
 
 ${'─'.repeat(30)}
 CLIENTE
@@ -3403,7 +3403,7 @@ function getPCChecks(p) {
     {
       key: 'fecha',
       label: 'Fecha que lo necesita',
-      sub: p.fechaLimite || '—',
+      sub: fmtFecha(p.fechaLimite) || '—',
       auto: esFB(p.fechaLimite),
     },
     {
@@ -3763,7 +3763,7 @@ function copiarTablaOV() {
   const aplicaTransf = (p.grabado === 'Sí' || p.nombresIndividuales === 'Sí' || p.nombresPorVaso === 'Sí');
   let lines = [];
   lines.push(`DATOS OV — ${p.razonSocial||p.nombreComercial||p.nombreContacto} (${p.id})`);
-  lines.push(`Contacto: ${p.nombreContacto||'—'} | Fecha de necesidad: ${p.fechaLimite||'—'}`);
+  lines.push(`Contacto: ${p.nombreContacto||'—'} | Fecha de necesidad: ${fmtFecha(p.fechaLimite)||'—'}`);
   lines.push('');
   lines.push('SKU Venta    | SKU Producción | Descripción EPICOR             | CANT | P.Unit c/IVA | P.Unit s/IVA | IVA Unit | Total c/IVA | Total s/IVA');
   lines.push('─'.repeat(145));
