@@ -1948,24 +1948,16 @@ function renderSeguimiento() {
   const extBadgeSeg = document.getElementById('seg-externo-badge');
   if (extBadgeSeg) extBadgeSeg.style.display = p.esExterno ? 'inline-flex' : 'none';
 
-  if (p.ovEpicor) {
-    // Mostrar card OV arriba si ya tiene OV guardada
-    const cardOvDisplay = document.getElementById('card-ov-display');
-    const ovDisplayNum  = document.getElementById('ov-display-num');
-    if (cardOvDisplay && ovDisplayNum) {
-      if (p.ovEpicor) {
-        cardOvDisplay.style.display = 'block';
-        ovDisplayNum.textContent = p.ovEpicor;
-      } else {
-        cardOvDisplay.style.display = 'none';
-      }
+  // Mostrar/ocultar card OV display (arriba, solo lectura)
+  const cardOvDisplay = document.getElementById('card-ov-display');
+  const ovDisplayNum  = document.getElementById('ov-display-num');
+  if (cardOvDisplay && ovDisplayNum) {
+    if (p.ovEpicor) {
+      cardOvDisplay.style.display = 'block';
+      ovDisplayNum.textContent = p.ovEpicor;
+    } else {
+      cardOvDisplay.style.display = 'none';
     }
-    document.getElementById('ov-ok').style.display = 'block';
-    document.getElementById('ov-ok').textContent = '✅ OV: ' + p.ovEpicor;
-  } else {
-    document.getElementById('inp-ov').value = '';
-    document.getElementById('ov-ok').style.display = 'none';
-    document.getElementById('ov-ok').textContent = '';
   }
 
   // Chips
