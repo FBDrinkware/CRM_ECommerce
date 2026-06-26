@@ -516,17 +516,10 @@
       </div>
     </div>
 
-    <!-- OV EPICOR -->
-    <div class="card">
-      <div class="seccion">🔢 OV EPICOR</div>
-      <div class="flex gap-2">
-        <input type="text" id="inp-ov" placeholder="Ej: OV-2026-00123"
-          class="flex-1 border border-fb-light rounded-xl px-4 py-3 text-sm outline-none focus:border-fb-dark text-fb-dark">
-        <button onclick="guardarOV()" class="bg-fb-dark text-white px-5 py-3 rounded-xl font-bold text-sm">Guardar</button>
-      </div>
-      <div id="ov-ok" class="text-xs text-green-600 font-bold mt-2" style="display:none"></div>
-      <button onclick="abrirModalDatosOV()"
-        class="btn-outline w-full mt-3 text-xs">📋 Ver datos para hacer OV en EPICOR</button>
+    <!-- OV EPICOR — solo muestra el número si ya existe, el campo se maneja en el paso 5 -->
+    <div class="card" id="card-ov-display" style="display:none">
+      <div class="seccion mb-1">🔢 OV EPICOR</div>
+      <div id="ov-display-num" class="text-fb-dark font-bold text-sm"></div>
     </div>
 
     <!-- Pasos del flujo -->
@@ -1956,7 +1949,17 @@ function renderSeguimiento() {
   if (extBadgeSeg) extBadgeSeg.style.display = p.esExterno ? 'inline-flex' : 'none';
 
   if (p.ovEpicor) {
-    document.getElementById('inp-ov').value = p.ovEpicor;
+    // Mostrar card OV arriba si ya tiene OV guardada
+    const cardOvDisplay = document.getElementById('card-ov-display');
+    const ovDisplayNum  = document.getElementById('ov-display-num');
+    if (cardOvDisplay && ovDisplayNum) {
+      if (p.ovEpicor) {
+        cardOvDisplay.style.display = 'block';
+        ovDisplayNum.textContent = p.ovEpicor;
+      } else {
+        cardOvDisplay.style.display = 'none';
+      }
+    }
     document.getElementById('ov-ok').style.display = 'block';
     document.getElementById('ov-ok').textContent = '✅ OV: ' + p.ovEpicor;
   } else {
@@ -2111,27 +2114,32 @@ function renderPasos() {
     { id:'pago', num:'3', titulo:'Gestionar pago', icono: p.formaPago?.includes('TDC') ? '💳' : '🏦',
       sub: ps['pago']?.ok ? 'Pago confirmado por CxC' : (p.formaPago?.includes('TDC') ? 'Generar link CLIP' : 'Compartir datos de transferencia'),
       done: !!(ps['pago']?.ok),
-      accion: ps['pago']?.ok ? null : () => gestionarPago(),
-      accionLabel: ps['pago']?.ok ? null : (p.formaPago?.includes('TDC') ? 'Abrir CLIP' : 'Ver datos'),
+      accion: null,
+      accionLabel: null,
       campoExtra: (() => {
         const yaOk = !!(ps['pago']?.ok);
         const refGuardada = p.refPago || '';
-        return `<div class="campo mt-3">
+        if (yaOk) {
+          // Paso completado: mostrar referencia en solo lectura
+          return `<div class="mt-2 text-xs text-green-700 font-bold">
+            ${refGuardada ? 'Ref. de pago: ' + refGuardada : ''}
+          </div>`;
+        }
+        const esTDC = p.formaPago?.includes('TDC');
+        const btnAccion = esTDC
+          ? `<button onclick="window.open('${CLIP_URL}','_blank')" class="btn-action btn-wa w-full justify-center mb-3">💳 Abrir CLIP</button>`
+          : `<button onclick="abrirModalTransferencia()" class="btn-action btn-copy w-full justify-center mb-3">🏦 Ver datos de transferencia</button>`;
+        return `${btnAccion}<div class="campo mt-1">
           <label>Referencia de pago <span class="text-red-500">*</span></label>
           <div class="flex gap-2 items-center mt-1">
             <input type="text" id="inp-ref-pago" placeholder="Ej: 2345678901"
               class="flex-1 border border-fb-light rounded-xl px-3 py-2 text-sm outline-none focus:border-fb-dark"
-              value="${refGuardada}" ${yaOk ? 'disabled' : ''}>
-            ${!yaOk ? `<button onclick="guardarRefPago()" class="btn-outline text-xs px-3 py-2 flex-shrink-0">Guardar</button>` : ''}
+              value="${refGuardada}">
+            <button onclick="guardarYConfirmarPagoCxC()" class="bg-fb-dark text-white text-xs font-bold px-3 py-2 rounded-xl flex-shrink-0 whitespace-nowrap">
+              Guardar y confirmar pago por CxC
+            </button>
           </div>
           ${refGuardada ? `<div class="text-[10px] text-fb-silver mt-1">Ref. guardada: ${refGuardada}</div>` : ''}
-        </div>
-        <div class="flex items-center gap-3 mt-2">
-          <input type="checkbox" id="chk-pago-cxc" ${yaOk?'checked disabled':''}
-            onchange="confirmarPagoCxC(this)">
-          <label for="chk-pago-cxc" class="text-xs font-bold text-fb-dark ${yaOk?'opacity-50':'cursor-pointer'}">
-            ✅ Pago confirmado por CxC
-          </label>
         </div>`;
       })(),
     },
@@ -2163,66 +2171,60 @@ function renderPasos() {
       tooltip: deseño && !ps['diseno-gmail']?.ok && !ps['diseno-gmail']?.noAplica ? 'Primero solicita el diseño o marca que no requiere diseñador (paso 4a)' : null,
     },
     { id:'ov', num:'5', titulo:'OV en EPICOR', icono:'🔢',
-      sub: tieneOV ? 'OV: ' + p.ovEpicor : 'Ingresa la OV en el campo de arriba',
+      sub: tieneOV ? 'OV: ' + p.ovEpicor : 'Ingresa la OV de EPICOR',
       done: tieneOV,
-      accion: tieneOV ? null : () => {
-        const el = document.getElementById('inp-ov');
-        const card = el.closest('.card');
-        // Scroll
-        const y = card.getBoundingClientRect().top + window.pageYOffset - 70;
-        window.scrollTo({top: Math.max(0, y), behavior: 'smooth'});
-        // Highlight: borde naranja parpadeante por 2 segundos
-        el.style.transition = 'box-shadow 0.2s, border-color 0.2s';
-        el.style.borderColor = '#ea580c';
-        el.style.boxShadow   = '0 0 0 3px rgba(234,88,12,0.25)';
-        setTimeout(() => el.focus(), 300);
-        setTimeout(() => {
-          el.style.borderColor = '';
-          el.style.boxShadow   = '';
-        }, 2000);
-      },
-      accionLabel: '↑ Ingresar OV',
-      tooltip: !tieneOV ? 'Genera la OV en EPICOR e ingrésala en el campo de arriba' : null,
+      accion: null,
+      accionLabel: null,
+      tooltip: !tieneOV ? 'Genera la OV en EPICOR e ingrésala aquí' : null,
+      campoExtra: (() => {
+        if (tieneOV) return `<div class="text-xs text-green-600 font-bold mt-2">✅ OV: ${p.ovEpicor}</div>`;
+        return `<div class="flex gap-2 mt-3">
+          <input type="text" id="inp-ov" placeholder="Ej: OV-2026-00123"
+            class="flex-1 border border-fb-light rounded-xl px-3 py-2 text-sm outline-none focus:border-fb-dark text-fb-dark">
+          <button onclick="guardarOV()" class="bg-fb-dark text-white px-4 py-2 rounded-xl font-bold text-sm flex-shrink-0">Guardar</button>
+        </div>
+        <div id="ov-ok" class="text-xs text-green-600 font-bold mt-2" style="display:none"></div>
+        <button onclick="abrirModalDatosOV()" class="btn-outline w-full mt-2 text-xs">📋 Ver datos para hacer OV en EPICOR</button>`;
+      })(),
     },
     { id:'produccion', num:'6', titulo:'Solicitar producción', icono:'🏭',
       sub: ps['produccion']?.ok ? 'Solicitud enviada' : 'Correo al equipo · Adjunta PDF del diseño',
       locked: !tieneOV || (deseño && !disenoDone),
       done: !!(ps['produccion']?.ok),
-      accion: ps['produccion']?.ok ? null : () => gmailProduccion(),
-      accionLabel: ps['produccion']?.ok ? null : 'Abrir Gmail',
+      accion: null, accionLabel: null,
       tooltip: ps['produccion']?.ok ? null : (!tieneOV ? 'Necesitas la OV de EPICOR para solicitar producción' : (deseño && !disenoDone ? 'El diseño debe estar aprobado por el cliente (paso 4b)' : null)),
-      campoExtra: `
-        <div class="mt-3 space-y-2">
+      campoExtra: (() => {
+        const prodOk = !!(ps['produccion']?.ok);
+        return `<div class="mt-3 space-y-2">
           <div class="campo"><label>Link carpeta OneDrive</label>
             <input type="text" id="inp-onedrive" placeholder="https://onedrive..." value="${p.urlOneDrive||''}"
-              ${ps['produccion']?.ok ? 'disabled class="prefilled"' : ''}></div>
+              ${prodOk ? 'disabled class="prefilled"' : ''}></div>
           <div class="campo"><label>PDF de muestra del diseño</label>
-            <div class="upload-zone text-xs ${ps['produccion']?.ok ? 'opacity-40 pointer-events-none' : ''}"
+            <div class="upload-zone text-xs ${prodOk ? 'opacity-40 pointer-events-none' : ''}"
               id="zone-pdf-prod"
-              onclick="${ps['produccion']?.ok ? '' : "document.getElementById('inp-pdf-prod').click()"}"
-              ondragover="${ps['produccion']?.ok ? '' : "dragOver(event,'zone-pdf-prod')"}"
-              ondragleave="${ps['produccion']?.ok ? '' : "dragLeave('zone-pdf-prod')"}"
-              ondrop="${ps['produccion']?.ok ? '' : "dropFile(event,'inp-pdf-prod','pdf-prod-nom',onPdfProduccionChange)"}">
-              📎 ${ps['produccion']?.ok ? 'Producción ya solicitada — no se permiten nuevos archivos' : 'Arrastra aquí o toca para subir PDF de muestra'}
+              onclick="${prodOk ? '' : "document.getElementById('inp-pdf-prod').click()"}"
+              ondragover="${prodOk ? '' : "dragOver(event,'zone-pdf-prod')"}"
+              ondragleave="${prodOk ? '' : "dragLeave('zone-pdf-prod')"}"
+              ondrop="${prodOk ? '' : "dropFile(event,'inp-pdf-prod','pdf-prod-nom',onPdfProduccionChange)"}">
+              📎 ${prodOk ? 'Producción ya solicitada — no se permiten nuevos archivos' : 'Arrastra aquí o toca para subir PDF de muestra'}
               <span id="pdf-prod-nom" class="font-bold text-fb-dark block mt-1">No seleccionado</span>
             </div>
             <input type="file" id="inp-pdf-prod" accept=".pdf" style="display:none"
-              ${ps['produccion']?.ok ? 'disabled' : 'onchange="onPdfProduccionChange(this)"'}>
-            ${ps['produccion']?.ok ? '' : `
-            <div class="alert-warn text-xs mt-2" style="padding:8px 12px;">
-              ⚠️ <strong>Recuerda:</strong> Gmail no permite adjuntar archivos automáticamente. El link de Drive aparecerá en el correo. Adjunta el PDF manualmente antes de enviar.
-            </div>`}
+              ${prodOk ? 'disabled' : 'onchange="onPdfProduccionChange(this)"'}>
+            ${prodOk ? '' : '<div class="alert-warn text-xs mt-2" style="padding:8px 12px;">⚠️ <strong>Recuerda:</strong> Gmail no permite adjuntar archivos automáticamente. Adjunta el PDF manualmente antes de enviar.</div>'}
           </div>
-          <div class="flex items-center gap-3 mt-2">
-            <input type="checkbox" id="chk-prod-ini" ${prodIniciada?'checked':''} onchange="toggleProduccionIniciada(this)"
-              ${prodIniciada?'disabled':''}>
-            <label for="chk-prod-ini" class="text-xs font-bold text-fb-dark cursor-pointer">
-              ⚙️ Producción iniciada — después de esta marca no se permiten modificaciones de SKU
-            </label>
-          </div>
-        </div>`,
+        </div>
+        ${!prodOk ? '<button onclick="gmailProduccion()" class="btn-action btn-gmail mt-3 w-full justify-center">Abrir Gmail</button>' : ''}
+        <div class="flex items-center gap-3 mt-3">
+          <input type="checkbox" id="chk-prod-ini" ${prodIniciada?'checked':''} onchange="toggleProduccionIniciada(this)"
+            ${prodIniciada?'disabled':''}>
+          <label for="chk-prod-ini" class="text-xs font-bold text-fb-dark cursor-pointer">
+            ⚙️ Producción iniciada — después de esta marca no se permiten modificaciones de SKU
+          </label>
+        </div>`;
+      })(),
     },
-    { id:'envio', num:'7', titulo:'Seguimiento de envío', icono:'📦',
+        { id:'envio', num:'7', titulo:'Seguimiento de envío', icono:'📦',
       sub: 'Avisa al cliente que su pedido está en camino',
       locked: !(ps['produccion']?.ok),
       done: !!(ps['envio']?.ok),
@@ -2360,31 +2362,54 @@ function gmailFactura() {
   marcarPaso('fac-anticipo');
 }
 
+// Abrir modal de datos de transferencia (sin marcar nada en Sheets)
+function abrirModalTransferencia() {
+  if (!document.getElementById('modal-transf')) {
+    const m = document.createElement('div');
+    m.id = 'modal-transf';
+    m.className = 'modal-overlay';
+    m.innerHTML = `<div class="modal-box">
+      <h3 class="font-black text-fb-dark mb-4">Datos de transferencia</h3>
+      <pre class="bg-fb-cream rounded-xl p-4 text-xs font-mono whitespace-pre-wrap">${DATOS_BANCO}</pre>
+      <button onclick="navigator.clipboard.writeText(\`${DATOS_BANCO}\`);showToast('Datos copiados')"
+        class="btn-action btn-copy w-full justify-center mt-3">Copiar datos</button>
+      <button onclick="document.getElementById('modal-transf').style.display='none'"
+        class="w-full text-fb-silver text-xs font-bold mt-3 bg-transparent border-none cursor-pointer">Cerrar</button>
+    </div>`;
+    document.body.appendChild(m);
+  }
+  document.getElementById('modal-transf').style.display = 'flex';
+}
+
+// Bug 2 fix: gestionarPago ya no marca pasos — solo abre CLIP o modal transferencia
 function gestionarPago() {
   if (S.pedido.formaPago?.includes('TDC')) {
-    window.open(CLIP_URL,'_blank');
-    apiPost({ action:'cambiarEstado', fbk:S.pedido.id, estado:'Gestión de pago', quien:S.asesor.nombre });
-    S.pedido.estado = 'Gestión de pago';
-    marcarPasoLocal('pago', true);
+    window.open(CLIP_URL, '_blank');
   } else {
-    if (!document.getElementById('modal-transf')) {
-      const m = document.createElement('div');
-      m.id = 'modal-transf';
-      m.className = 'modal-overlay';
-      m.innerHTML = `<div class="modal-box">
-        <h3 class="font-black text-fb-dark mb-4">Datos de transferencia</h3>
-        <pre class="bg-fb-cream rounded-xl p-4 text-xs font-mono whitespace-pre-wrap">${DATOS_BANCO}</pre>
-        <button onclick="navigator.clipboard.writeText(\`${DATOS_BANCO}\`);showToast('Datos copiados')"
-          class="btn-action btn-copy w-full justify-center mt-3">Copiar datos</button>
-        <button onclick="confirmarPagoTransf()"
-          class="btn-action btn-gmail w-full justify-center mt-2">Marcar enviado al cliente</button>
-        <button onclick="document.getElementById('modal-transf').style.display='none'"
-          class="w-full text-fb-silver text-xs font-bold mt-3 bg-transparent border-none cursor-pointer">Cerrar sin marcar</button>
-      </div>`;
-      document.body.appendChild(m);
-    }
-    document.getElementById('modal-transf').style.display = 'flex';
+    abrirModalTransferencia();
   }
+}
+
+// Nuevo: guardar referencia + confirmar pago en un solo botón
+async function guardarYConfirmarPagoCxC() {
+  const ref = document.getElementById('inp-ref-pago')?.value?.trim();
+  if (!ref) { showToast('⚠️ Ingresa la referencia de pago antes de confirmar'); return; }
+  if (!confirm('¿Confirmas que CxC validó el pago con referencia ' + ref + '?')) return;
+  // Guardar referencia
+  await apiPost({ action:'guardarCampoExtra', fbk:S.pedido.id,
+    campo:'REF_PAGO', valor:ref, quien:S.asesor.nombre });
+  S.pedido.refPago = ref;
+  // Cambiar estado y marcar paso
+  const ts = new Date().toLocaleString('es-MX');
+  S.pasos['pago'] = { ok: true, ts };
+  await apiPost({ action:'marcarPaso', fbk:S.pedido.id, paso:'pago',
+    valor:true, ts, quien:S.asesor.nombre });
+  await apiPost({ action:'cambiarEstado', fbk:S.pedido.id,
+    estado:'Gestión de pago', quien:S.asesor.nombre });
+  S.pedido.estado = 'Gestión de pago';
+  guardarSession();
+  renderPasos();
+  showToast('Pago confirmado ✅');
 }
 
 function gmailDiseno() {
