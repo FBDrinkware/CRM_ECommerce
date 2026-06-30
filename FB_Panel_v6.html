@@ -519,7 +519,8 @@
     <!-- OV EPICOR — solo muestra el número si ya existe, el campo se maneja en el paso 5 -->
     <div class="card" id="card-ov-display" style="display:none">
       <div class="seccion mb-1">🔢 OV EPICOR</div>
-      <div id="ov-display-num" class="text-fb-dark font-bold text-sm"></div>
+      <div id="ov-display-num" class="text-fb-dark font-bold text-sm mb-3"></div>
+      <button onclick="abrirModalDatosOV()" class="btn-outline w-full text-xs">📋 Ver datos para hacer OV en EPICOR</button>
     </div>
 
     <!-- Pasos del flujo -->
@@ -818,7 +819,9 @@ async function iniciarSesion() {
   const pin    = document.getElementById('inp-pin-login').value.trim();
   if (!correo) { document.getElementById('inp-correo-login').focus(); return; }
   if (!pin)    { document.getElementById('inp-pin-login').focus(); return; }
+  showLoading('Iniciando sesión...');
   const res = await apiGet('autenticar', { correo, pin });
+  hideLoading();
   if (!res.ok) {
     const el = document.getElementById('login-error');
     el.textContent = res.error || 'Credenciales incorrectas. Contacta al administrador.';
@@ -1060,6 +1063,7 @@ async function cotGuardar() {
     if (monto > 0) otrosCargos.push({ desc, monto });
   });
 
+  showLoading('Guardando cotización...');
   const res = await apiPost({
     action:   'guardarCotizacion',
     asesor:   S.asesor.correo,
@@ -1076,6 +1080,7 @@ async function cotGuardar() {
     total:    document.getElementById('cot-total').textContent,
     numExistente: COT.num || null,
   });
+  hideLoading();
   if (res.ok) {
     if (res.num) { COT.num = res.num; document.getElementById('cot-num-display').textContent = COT.num; }
     COT.guardado = true;
@@ -1092,6 +1097,7 @@ async function cotConvertirPedido() {
   if (COT.lineas.length===0) { showToast('Agrega al menos un producto'); return; }
   if (!confirm(`¿Convertir esta cotización en pedido para ${cliente}? Se creará un nuevo FBK en el panel.`)) return;
   document.getElementById('cot-status').textContent = 'Creando pedido...';
+  showLoading('Creando pedido...');
   const res = await apiPost({
     action:   'cotizacionAPedido',
     asesor:   S.asesor.codigo,
@@ -1105,6 +1111,7 @@ async function cotConvertirPedido() {
     })),
     cotNum: COT.num || '',
   });
+  hideLoading();
   if (res.ok) {
     document.getElementById('cot-status').textContent = '✅ Pedido creado: ' + (res.fbk||'');
     showToast('Pedido creado: ' + (res.fbk||''));
@@ -1115,7 +1122,9 @@ async function cotConvertirPedido() {
 
 async function cotHistorial() {
   showToast('Cargando historial...');
+  showLoading('Cargando historial...');
   const res = await apiGet('getCotizaciones', { asesor: S.asesor.correo });
+  hideLoading();
   if (!res.ok || !res.cotizaciones?.length) { showToast('Sin cotizaciones guardadas'); return; }
   const lista = res.cotizaciones.map(c =>
     `<div class="border-b border-fb-light py-2 flex justify-between items-center">
@@ -1131,7 +1140,9 @@ async function cotHistorial() {
 }
 
 async function cotCargar(num) {
+  showLoading('Cargando cotización...');
   const res = await apiGet('getCotizacion', { num });
+  hideLoading();
   if (!res.ok) { showToast('No se encontró la cotización'); return; }
   const c = res.cotizacion;
   COT.num    = c.num;
@@ -1816,8 +1827,10 @@ async function extraerCSF() {
 
 async function confirmarVenta() {
   if (!S.pedido) return;
+  showLoading('Confirmando venta...');
   await apiPost({ action:'cambiarEstado', fbk:S.pedido.id, estado:'Venta', quien:S.asesor.nombre });
   S.pedido.estado = 'Venta';
+  hideLoading();
   document.getElementById('alerta-estado').style.display = 'none';
   showToast('Estado cambiado a Venta ✅');
 }
@@ -2285,9 +2298,11 @@ async function marcarPasoLocal(id, valor) {
   const ts = new Date().toLocaleString('es-MX');
   S.pasos[id] = { ok: valor, ts };
   guardarSession();
+  showLoading('Guardando...');
   try {
     await apiPost({ action:'marcarPaso', fbk:S.pedido.id, paso:id, valor, ts, quien:S.asesor.nombre });
   } catch(e) { console.warn('marcarPaso err:', e); }
+  hideLoading();
   renderPasos();
 }
 
@@ -2302,7 +2317,9 @@ function marcarPaso(id) {
   const ts = new Date().toLocaleString('es-MX');
   S.pasos[id] = { ok:true, ts };
   guardarSession();
-  apiPost({ action:'marcarPaso', fbk:S.pedido.id, paso:id, valor:true, ts, quien:S.asesor.nombre });
+  showLoading('Guardando...');
+  apiPost({ action:'marcarPaso', fbk:S.pedido.id, paso:id, valor:true, ts, quien:S.asesor.nombre })
+    .finally(() => hideLoading());
   renderPasos();
   showToast('Paso registrado ✅');
 }
@@ -2313,7 +2330,9 @@ async function toggleProduccionIniciada(el) {
     el.checked = false; return;
   }
   S.produccionIniciada = true;
+  showLoading('Registrando inicio de producción...');
   await apiPost({ action:'marcarProduccionIniciada', fbk:S.pedido.id, valor:true, quien:S.asesor.nombre });
+  hideLoading();
   showToast('Producción iniciada registrada ✅');
   renderPasos();
 }
@@ -2323,10 +2342,12 @@ async function marcarEntregado(el) {
   if (!confirm('¿Marcar este pedido como Entregado? Se registrará el timestamp y la duración total.')) {
     el.checked = false; return;
   }
+  showLoading('Marcando como entregado...');
   await apiPost({ action:'cambiarEstado', fbk:S.pedido.id, estado:'Entregado', quien:S.asesor.nombre });
   S.pedido.estado = 'Entregado';
   marcarPaso('envio');
   guardarSession();
+  hideLoading();
   showToast('¡Pedido marcado como Entregado! 🎉');
   renderPasos();
   renderSeguimiento();
@@ -2387,6 +2408,7 @@ async function guardarYConfirmarPagoCxC() {
   const ref = document.getElementById('inp-ref-pago')?.value?.trim();
   if (!ref) { showToast('⚠️ Ingresa la referencia de pago antes de confirmar'); return; }
   if (!confirm('¿Confirmas que CxC validó el pago con referencia ' + ref + '?')) return;
+  showLoading('Confirmando pago...');
   // Guardar referencia
   await apiPost({ action:'guardarCampoExtra', fbk:S.pedido.id,
     campo:'REF_PAGO', valor:ref, quien:S.asesor.nombre });
@@ -2401,6 +2423,7 @@ async function guardarYConfirmarPagoCxC() {
   S.pedido.estado = 'Gestión de pago';
   guardarSession();
   renderPasos();
+  hideLoading();
   showToast('Pago confirmado ✅');
 }
 
@@ -2686,6 +2709,7 @@ async function guardarModificaciones() {
 
   if (!cambios.length) { cerrarModal('modal-prods'); return; }
 
+  showLoading('Guardando productos...');
   const res = await apiPost({ action:'modificarProductos', fbk:S.pedido.id, cambios, quien:S.asesor.nombre });
   if (res.ok) {
     // Si hay cambios con producción ya iniciada, avisar a producción
@@ -2695,7 +2719,11 @@ async function guardarModificaciones() {
     if (fresh.ok) S.pedido = fresh.pedido;
     cerrarModal('modal-prods');
     renderSeguimiento();
+    hideLoading();
     showToast('Productos actualizados ✅');
+  } else {
+    hideLoading();
+    showToast('❌ Error al guardar productos');
   }
 }
 
@@ -2776,11 +2804,13 @@ async function crearPedidoManual() {
     productos.push({ sku:skuEl.value, desc:opt.dataset.desc, cant:parseInt(cantEl.value), precio:Number(opt.dataset.precio) });
   });
 
+  showLoading('Creando pedido...');
   const res = await apiPost({ action:'crearPedidoManual',
     datos:{ nombreContacto:contacto, telefono:tel,
       empresa:v('mm-empresa'), correo:v('mm-correo'), comentarios:v('mm-comentarios'),
       asesorCodigo:S.asesor.codigo, asesorNombre:S.asesor.nombre },
     productos, quien:S.asesor.nombre });
+  hideLoading();
 
   if (res.ok) {
     cerrarModal('modal-manual');
@@ -2798,8 +2828,10 @@ function abrirModalVincular() { document.getElementById('modal-vincular').style.
 async function confirmarVinculo() {
   const fbkNuevo = document.getElementById('inp-fbk-vincular').value.trim().toUpperCase();
   if (!fbkNuevo) return showToast('Ingresa un FBK','error');
+  showLoading('Vinculando pedido...');
   await apiPost({ action:'vincularPedido', fbkOrigen:S.pedido.id, fbkNuevo, quien:S.asesor.nombre });
   S.pedido.pedidoVinculado = (S.pedido.pedidoVinculado ? S.pedido.pedidoVinculado+', ' : '') + fbkNuevo;
+  hideLoading();
   cerrarModal('modal-vincular');
   renderSeguimiento();
   showToast('Pedido vinculado ✅');
@@ -2941,6 +2973,7 @@ async function toggleNoRequiereDiseñador(el) {
     ? '¿Confirmas que este pedido no requiere intervención del diseñador? Se marcarán los pasos 4a y 4b como completados.'
     : '¿Confirmas que sí requiere diseñador? Los pasos 4a y 4b se reabrirán.';
   if (!confirm(msg)) { el.checked = !marcar; return; }
+  showLoading('Guardando...');
   const ts = new Date().toLocaleString('es-MX');
   if (marcar) {
     S.pasos['diseno-gmail']    = { ok: true, noAplica: true, ts };
@@ -2957,6 +2990,7 @@ async function toggleNoRequiereDiseñador(el) {
     await apiPost({ action:'marcarPaso', fbk:S.pedido.id, paso:'diseno-aprobado',
       valor:false, ts, quien:S.asesor.nombre });
   }
+  hideLoading();
   guardarSession();
   renderPasos();
   showToast(marcar ? 'Pasos 4a y 4b marcados — sin diseñador ✅' : 'Pasos 4a y 4b reactivados');
@@ -2991,9 +3025,11 @@ async function confirmarPagoCxC(el) {
 async function guardarRefPago() {
   const ref = document.getElementById('inp-ref-pago')?.value?.trim();
   if (!ref) { showToast('Ingresa la referencia de pago'); return; }
+  showLoading('Guardando referencia...');
   await apiPost({ action:'guardarCampoExtra', fbk:S.pedido.id,
     campo:'REF_PAGO', valor:ref, quien:S.asesor.nombre });
   S.pedido.refPago = ref;
+  hideLoading();
   showToast('Referencia guardada ✅');
   renderPasos();
 }
@@ -3001,9 +3037,11 @@ async function guardarRefPago() {
 async function guardarNumFactura() {
   const num = document.getElementById('inp-num-factura')?.value?.trim();
   if (!num) { showToast('Ingresa el número de factura'); return; }
+  showLoading('Guardando número de factura...');
   await apiPost({ action:'guardarCampoExtra', fbk:S.pedido.id,
     campo:'NUM_FACTURA', valor:num, quien:S.asesor.nombre });
   S.pedido.numFactura = num;
+  hideLoading();
   showToast('Número de factura guardado ✅');
   renderPasos();
 }
@@ -3015,6 +3053,7 @@ async function toggleNoAplicaAnticipo(el) {
     : '¿Confirmas que este cliente sí requiere factura de anticipo? El paso se reabrirá.';
   if (!confirm(msg)) { el.checked = !marcar; return; }
 
+  showLoading('Guardando...');
   const ts = new Date().toLocaleString('es-MX');
   if (marcar) {
     S.pasos['fac-anticipo'] = { ok: true, noAplica: true, ts };
@@ -3025,6 +3064,7 @@ async function toggleNoAplicaAnticipo(el) {
     await apiPost({ action:'marcarPaso', fbk:S.pedido.id, paso:'fac-anticipo',
       valor:false, ts, quien:S.asesor.nombre });
   }
+  hideLoading();
   guardarSession();
   renderPasos();
   showToast(marcar ? 'Factura de anticipo marcada como no requerida' : 'Paso de factura de anticipo reactivado');
