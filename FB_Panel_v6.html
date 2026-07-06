@@ -181,6 +181,15 @@
     </div>
     <div id="lista-por-etapa"><p class="text-xs text-fb-silver text-center py-4">Cargando...</p></div>
   </div>
+  <div class="card" id="card-transito" style="display:none">
+    <button class="w-full text-left" onclick="toggleSeccion('transito')">
+      <div class="flex items-center justify-between">
+        <div class="seccion mb-0" style="color:#0369a1;">🚚 Pedidos en tránsito <span id="cnt-transito" class="font-normal" style="color:#7dd3fc;"></span></div>
+        <svg id="chev-transito" xmlns="http://www.w3.org/2000/svg" width="18" height="18" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5" style="transition:transform .2s;flex-shrink:0;transform:rotate(180deg)"><path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7"/></svg>
+      </div>
+    </button>
+    <div id="lista-transito" style="margin-top:10px;"></div>
+  </div>
   <div class="card" id="card-cerrados" style="display:none">
     <button class="w-full text-left" onclick="toggleSeccion('cerrados')">
       <div class="flex items-center justify-between">
@@ -189,6 +198,15 @@
       </div>
     </button>
     <div id="lista-cerrados" style="display:none;margin-top:10px;"></div>
+  </div>
+  <div class="card" id="card-mes-anterior" style="display:none">
+    <button class="w-full text-left" onclick="toggleSeccion('mes-anterior')">
+      <div class="flex items-center justify-between">
+        <div class="seccion mb-0" style="color:#6b7280;">📁 Cerrados el mes pasado <span id="cnt-mes-anterior" class="text-fb-silver font-normal"></span></div>
+        <svg id="chev-mes-anterior" xmlns="http://www.w3.org/2000/svg" width="18" height="18" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5" style="transition:transform .2s;flex-shrink:0"><path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7"/></svg>
+      </div>
+    </button>
+    <div id="lista-mes-anterior" style="display:none;margin-top:10px;"></div>
   </div>
   <div class="card" id="card-frias" style="display:none">
     <button class="w-full text-left" onclick="toggleSeccion('frias')">
@@ -1320,7 +1338,9 @@ async function cargarPendientes() {
   if (!res.ok) return;
   const todos = [...(res.porAtender||[]), ...(res.enProceso||[])];
   renderPendientesPorEtapa(todos);
+  renderTransito(res.enTransito||[]);
   renderCerrados(res.cerradosMes||[]);
+  renderMesAnterior(res.cerradosMesAnterior||[]);
   renderFrias(res.ventasFrias||[]);
 }
 
@@ -2230,13 +2250,15 @@ function renderPasos() {
       })(),
     },
         { id:'envio', num:'7', titulo:'Seguimiento de envío', icono:'📦',
-      sub: 'Avisa al cliente que su pedido está en camino',
+      sub: ps['envio']?.ok ? 'Entregado' : ps['enviado']?.ok ? 'Pedido en camino — esperando confirmación de entrega' : 'Avisa al cliente que su pedido está en camino',
       locked: !(ps['produccion']?.ok),
       done: !!(ps['envio']?.ok),
       accion: () => waEnvio(), accionLabel: 'WhatsApp',
       campoExtra: (() => {
         const yaEntregado = !!(ps['envio']?.ok);
+        const yaEnviado   = !!(ps['enviado']?.ok);
         const numFact = p.numFactura || '';
+        const tsEnviado = ps['enviado']?.ts || '';
         return `<div class="campo mt-3">
           <label>Factura número</label>
           <div class="flex gap-2 items-center mt-1">
@@ -2247,6 +2269,14 @@ function renderPasos() {
           </div>
           ${numFact ? `<div class="text-[10px] text-fb-silver mt-1">Factura guardada: ${numFact}</div>` : ''}
         </div>
+        <div class="flex items-center gap-3 mt-3">
+          <input type="checkbox" id="chk-enviado" onchange="marcarPedidoEnviado(this)"
+            ${yaEnviado ? 'checked disabled' : ''} ${yaEntregado ? 'disabled' : ''}>
+          <label for="chk-enviado" class="text-xs font-bold text-fb-dark ${yaEnviado ? 'opacity-50' : 'cursor-pointer'}">
+            🚚 Pedido enviado — marca el inicio del tránsito (paquetería)
+          </label>
+        </div>
+        ${yaEnviado && tsEnviado ? `<div class="text-[10px] text-blue-500 mt-1">Enviado: ${tsEnviado}</div>` : ''}
         <div class="flex items-center gap-3 mt-2">
           <input type="checkbox" id="chk-entregado" onchange="marcarEntregado(this)"
             ${yaEntregado ? 'checked disabled' : ''}>
@@ -2335,6 +2365,26 @@ async function toggleProduccionIniciada(el) {
   hideLoading();
   showToast('Producción iniciada registrada ✅');
   renderPasos();
+}
+
+async function marcarPedidoEnviado(el) {
+  if (!el.checked) return;
+  if (!confirm('¿Confirmar que el pedido fue enviado por paquetería? Se marcará como "En camino".')) {
+    el.checked = false; return;
+  }
+  showLoading('Marcando pedido como enviado...');
+  const ts = new Date().toLocaleString('es-MX');
+  S.pasos['enviado'] = { ok: true, ts };
+  await apiPost({ action:'marcarPaso', fbk:S.pedido.id, paso:'enviado',
+    valor:true, ts, quien:S.asesor.nombre });
+  await apiPost({ action:'cambiarEstado', fbk:S.pedido.id,
+    estado:'En camino', quien:S.asesor.nombre });
+  S.pedido.estado = 'En camino';
+  S.pedido.fechaEnviado = ts;
+  guardarSession();
+  hideLoading();
+  renderPasos();
+  showToast('Pedido marcado como enviado 🚚');
 }
 
 async function marcarEntregado(el) {
@@ -2633,6 +2683,12 @@ async function guardarOV() {
 // ════════════════════════════════
 function abrirModificarProductos() {
   const p = S.pedido; if (!p) return;
+  // Bloquear si el pedido ya fue enviado (En camino)
+  const enCamino = S.pedido.estado === 'En camino' || !!(S.pasos?.['enviado']?.ok);
+  if (enCamino) {
+    showToast('No se pueden modificar productos — el pedido ya fue enviado 🚚');
+    return;
+  }
   const prodIniciada = S.produccionIniciada;
   const editor = document.getElementById('editor-prods');
   editor.innerHTML = (p.productos||[]).map((pr,i) => `
@@ -3263,6 +3319,71 @@ function renderCerrados(lista) {
           <div class="font-mono text-[10px] text-fb-silver">${p.id}</div>
           <div class="font-bold text-fb-dark text-sm">${/PUBLICO EN GENERAL/i.test(p.empresa||'') ? (p.contacto||p.empresa) : (p.empresa||p.contacto)}</div>
           <div class="text-xs text-fb-mid">${/PUBLICO EN GENERAL/i.test(p.empresa||'') ? (p.empresa||'') : (p.contacto||'')} ${p.ovEpicor ? "· " + p.ovEpicor : ""}</div>
+          ${p.numFactura ? `<div class="text-[10px] text-fb-silver mt-0.5">Factura: ${p.numFactura}</div>` : ''}
+        </div>
+        <div class="flex flex-col items-end gap-1">
+          <span class="badge ${badgeCls} text-[10px]">${p.estado}</span>
+          ${totalFmt ? `<span class="text-xs font-bold text-fb-dark">${totalFmt}</span>` : ''}
+        </div>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function renderTransito(lista) {
+  const card = document.getElementById('card-transito');
+  const div  = document.getElementById('lista-transito');
+  const cnt  = document.getElementById('cnt-transito');
+  if (!lista || !lista.length) { card.style.display = 'none'; return; }
+  card.style.display = 'block';
+  if (cnt) cnt.textContent = '(' + lista.length + ')';
+  // Empieza expandido — es información urgente (pedidos en camino)
+  div.style.display = 'block';
+  document.getElementById('chev-transito').style.transform = 'rotate(180deg)';
+  div.innerHTML = lista.map(p => {
+    const esPG = /PUBLICO EN GENERAL/i.test(p.empresa||'');
+    const nombreGrande = esPG ? (p.contacto||p.empresa) : (p.empresa||p.contacto);
+    const nombreChico  = esPG ? (p.empresa||'') : (p.contacto||'');
+    const fechaEnv = p.fechaEnviado ? ' · Enviado: ' + fmtFecha(p.fechaEnviado) : '';
+    return `<div class="pendiente-card" onclick="cargarPedidoDesdeListado('${p.id}')">
+      <div class="flex items-start justify-between gap-2">
+        <div>
+          <div class="font-mono text-[10px] text-fb-silver">${p.id}</div>
+          <div class="font-bold text-fb-dark text-sm">${nombreGrande}</div>
+          <div class="text-xs text-fb-mid">${nombreChico} ${p.ovEpicor ? '· ' + p.ovEpicor : ''}</div>
+          ${fechaEnv ? `<div class="text-[10px] text-blue-500 mt-0.5">🚚${fechaEnv}</div>` : ''}
+        </div>
+        <div class="flex flex-col items-end gap-1">
+          <span class="badge badge-proceso text-[10px]">En camino</span>
+          ${p.subtotal ? `<span class="text-xs font-bold text-fb-dark">$${Number(p.subtotal).toLocaleString('es-MX',{minimumFractionDigits:0})}</span>` : ''}
+        </div>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function renderMesAnterior(lista) {
+  const card = document.getElementById('card-mes-anterior');
+  const div  = document.getElementById('lista-mes-anterior');
+  const cnt  = document.getElementById('cnt-mes-anterior');
+  if (!lista || !lista.length) { card.style.display = 'none'; return; }
+  card.style.display = 'block';
+  if (cnt) cnt.textContent = '(' + lista.length + ')';
+  // Empieza contraído — es histórico
+  div.style.display = 'none';
+  document.getElementById('chev-mes-anterior').style.transform = 'rotate(0deg)';
+  div.innerHTML = lista.map(p => {
+    const esPG = /PUBLICO EN GENERAL/i.test(p.empresa||'');
+    const nombreGrande = esPG ? (p.contacto||p.empresa) : (p.empresa||p.contacto);
+    const nombreChico  = esPG ? (p.empresa||'') : (p.contacto||'');
+    const badgeCls = badgeEstado(p.estado);
+    const totalFmt = p.subtotal ? '$' + Number(p.subtotal).toLocaleString('es-MX',{minimumFractionDigits:0}) : '';
+    return `<div class="pendiente-card" onclick="cargarPedidoDesdeListado('${p.id}')">
+      <div class="flex items-start justify-between gap-2">
+        <div>
+          <div class="font-mono text-[10px] text-fb-silver">${p.id}</div>
+          <div class="font-bold text-fb-dark text-sm">${nombreGrande}</div>
+          <div class="text-xs text-fb-mid">${nombreChico} ${p.ovEpicor ? '· ' + p.ovEpicor : ''}</div>
           ${p.numFactura ? `<div class="text-[10px] text-fb-silver mt-0.5">Factura: ${p.numFactura}</div>` : ''}
         </div>
         <div class="flex flex-col items-end gap-1">
