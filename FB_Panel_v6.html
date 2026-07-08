@@ -447,6 +447,83 @@
           <p class="text-[10px] text-fb-silver mt-1">Se guardará como línea separada en el pedido.</p>
         </div>
       </div>
+
+      <!-- Cargos extra -->
+      <div id="cargos-extra-seccion" class="mt-3 space-y-2">
+        <div class="text-xs font-bold text-fb-mid mb-1">Cargos adicionales</div>
+
+        <!-- Cargo Diseño -->
+        <div class="card" style="background:#fdf4ff;border:1px dashed #c084fc;padding:10px 14px;border-radius:12px">
+          <div class="flex items-center justify-between mb-1">
+            <span class="text-xs font-bold text-fb-dark">🎨 Cargo por Diseño</span>
+            <button onclick="toggleCargoExtra('diseno')" id="btn-toggle-cargo-diseno" class="btn-outline text-xs py-1">+ Agregar</button>
+          </div>
+          <div id="cargo-linea-diseno" style="display:none">
+            <div class="campo mt-1"><label>Descripción</label>
+              <input type="text" id="f-desc-cargo-diseno" value="Cargo por Diseño" class="text-xs">
+            </div>
+            <div class="campo mt-1"><label>Monto (MXN, con IVA)</label>
+              <input type="number" id="f-monto-cargo-diseno" placeholder="Ej: 500" min="0" step="0.01">
+            </div>
+            <button onclick="guardarCargoExtra('CARGO-DISENO','diseno')" class="btn-action btn-gmail text-xs mt-2">Guardar cargo</button>
+            <p class="text-[10px] text-fb-silver mt-1">Se guardará como línea separada en el pedido.</p>
+          </div>
+        </div>
+
+        <!-- Cargo Grabado extra -->
+        <div class="card" style="background:#fff7ed;border:1px dashed #fb923c;padding:10px 14px;border-radius:12px">
+          <div class="flex items-center justify-between mb-1">
+            <span class="text-xs font-bold text-fb-dark">✏️ Cargo por Grabado extra</span>
+            <button onclick="toggleCargoExtra('grabado')" id="btn-toggle-cargo-grabado" class="btn-outline text-xs py-1">+ Agregar</button>
+          </div>
+          <div id="cargo-linea-grabado" style="display:none">
+            <div class="campo mt-1"><label>Descripción</label>
+              <input type="text" id="f-desc-cargo-grabado" value="Cargo por Grabado extra" class="text-xs">
+            </div>
+            <div class="campo mt-1"><label>Monto (MXN, con IVA)</label>
+              <input type="number" id="f-monto-cargo-grabado" placeholder="Ej: 300" min="0" step="0.01">
+            </div>
+            <button onclick="guardarCargoExtra('CARGO-GRABADO','grabado')" class="btn-action btn-gmail text-xs mt-2">Guardar cargo</button>
+            <p class="text-[10px] text-fb-silver mt-1">Se guardará como línea separada en el pedido.</p>
+          </div>
+        </div>
+
+        <!-- Cargo Urgencia -->
+        <div class="card" style="background:#fff1f2;border:1px dashed #f87171;padding:10px 14px;border-radius:12px">
+          <div class="flex items-center justify-between mb-1">
+            <span class="text-xs font-bold text-fb-dark">⚡ Cargo por Urgencia</span>
+            <button onclick="toggleCargoExtra('urgencia')" id="btn-toggle-cargo-urgencia" class="btn-outline text-xs py-1">+ Agregar</button>
+          </div>
+          <div id="cargo-linea-urgencia" style="display:none">
+            <div class="campo mt-1"><label>Descripción</label>
+              <input type="text" id="f-desc-cargo-urgencia" value="Cargo por Urgencia" class="text-xs">
+            </div>
+            <div class="campo mt-1"><label>Monto (MXN, con IVA)</label>
+              <input type="number" id="f-monto-cargo-urgencia" placeholder="Ej: 400" min="0" step="0.01">
+            </div>
+            <button onclick="guardarCargoExtra('CARGO-URGENCIA','urgencia')" class="btn-action btn-gmail text-xs mt-2">Guardar cargo</button>
+            <p class="text-[10px] text-fb-silver mt-1">Se guardará como línea separada en el pedido.</p>
+          </div>
+        </div>
+
+        <!-- Otros cargos adicionales -->
+        <div class="card" style="background:#f0fdf4;border:1px dashed #4ade80;padding:10px 14px;border-radius:12px">
+          <div class="flex items-center justify-between mb-1">
+            <span class="text-xs font-bold text-fb-dark">📋 Otros cargos adicionales</span>
+            <button onclick="toggleCargoExtra('otros')" id="btn-toggle-cargo-otros" class="btn-outline text-xs py-1">+ Agregar</button>
+          </div>
+          <div id="cargo-linea-otros" style="display:none">
+            <div class="campo mt-1"><label>Descripción</label>
+              <input type="text" id="f-desc-cargo-otros" placeholder="Ej: Cargo por isla, cargo especial..." class="text-xs">
+            </div>
+            <div class="campo mt-1"><label>Monto (MXN, con IVA)</label>
+              <input type="number" id="f-monto-cargo-otros" placeholder="Ej: 200" min="0" step="0.01">
+            </div>
+            <button onclick="guardarCargoExtra('CARGO-OTROS','otros')" class="btn-action btn-gmail text-xs mt-2">Guardar cargo</button>
+            <p class="text-[10px] text-fb-silver mt-1">Se guardará como línea separada en el pedido.</p>
+          </div>
+        </div>
+      </div>
       <div class="campo mt-3">
         <label>Comentarios internos</label>
         <textarea id="f-comentarios" placeholder="Notas del asesor, acuerdos especiales, detalles del evento..."></textarea>
@@ -2580,6 +2657,25 @@ function confirmarEnvioProduccion() {
   }).join('\n');
   const asunto = `PRODUCCIÓN OV ${ov} — ${p.nombreComercial||p.razonSocial}`;
 
+  // Detectar cargos adicionales (ENVIO, CARGO-*) de los productos del pedido
+  const skusCargos = ['ENVIO','CARGO-DISENO','CARGO-GRABADO','CARGO-URGENCIA','CARGO-OTROS'];
+  const cargosFactura = (p.productos||[]).filter(pr =>
+    skusCargos.includes((pr.sku||'').toString().toUpperCase())
+  );
+  const lineaCargos = cargosFactura.length > 0
+    ? `\nFacturar los cargos adicionales como "Cargos Varios":\n` +
+      cargosFactura.map(pr => {
+        const montoIVA   = Number(pr.total || pr.precioUnit || 0);
+        const montoSinIVA = (montoIVA / 1.16).toFixed(2);
+        const desc = (pr.descripcion||pr.sku||'Cargo').split('·')[0].trim();
+        return `  · ${desc}\n    Con IVA: $${montoIVA.toLocaleString('es-MX',{minimumFractionDigits:2})}  |  Sin IVA: $${Number(montoSinIVA).toLocaleString('es-MX',{minimumFractionDigits:2})}`;
+      }).join('\n') +
+      (() => {
+        const subtotalSinIVA = cargosFactura.reduce((s,pr) => s + (Number(pr.total||pr.precioUnit||0)/1.16), 0);
+        return `\n\n  Subtotal Cargos Varios s/IVA: $${subtotalSinIVA.toLocaleString('es-MX',{minimumFractionDigits:2})}`;
+      })()
+    : '';
+
   const body =
 `Buenos días equipo,
 
@@ -2628,7 +2724,7 @@ ${'─'.repeat(30)}
 FACTURACIÓN
 ${'─'.repeat(30)}
 Referencia de pago: ${p.refPago||'—'}
-${notaFactura}
+${notaFactura}${lineaCargos}
 
 Asesor: ${S.asesor.nombre} (${S.asesor.codigo})
 
@@ -3276,6 +3372,43 @@ async function guardarEnvio() {
     guardarSession();
   } else {
     showToast('Error al guardar envío', 'error');
+  }
+}
+
+function toggleCargoExtra(tipo) {
+  const div = document.getElementById(`cargo-linea-${tipo}`);
+  const btn = document.getElementById(`btn-toggle-cargo-${tipo}`);
+  if (!div || !btn) return;
+  const abierto = div.style.display !== 'none';
+  div.style.display = abierto ? 'none' : 'block';
+  btn.textContent = abierto ? '+ Agregar' : '− Quitar';
+  if (abierto) {
+    const montoEl = document.getElementById(`f-monto-cargo-${tipo}`);
+    if (montoEl) montoEl.value = '';
+  }
+}
+
+async function guardarCargoExtra(sku, tipo) {
+  const desc  = document.getElementById(`f-desc-cargo-${tipo}`)?.value?.trim();
+  const monto = parseFloat(document.getElementById(`f-monto-cargo-${tipo}`)?.value) || 0;
+  if (!monto) return showToast('Ingresa el monto del cargo', 'error');
+  if (!S.pedido?.id) return showToast('No hay pedido activo', 'error');
+  showLoading('Guardando cargo...');
+  const nombreCliente = S.pedido.nombreComercial || S.pedido.razonSocial || S.pedido.nombreContacto;
+  const res = await apiPostWithData({
+    action: 'agregarCargoExtra',
+    fbk: S.pedido.id,
+    sku, descripcion: desc, monto, nombreCliente,
+    quien: S.asesor.nombre,
+  });
+  hideLoading();
+  if (res && res.ok) {
+    showToast('Cargo guardado ✅');
+    const fresh = await apiGet('getPedido', { fbk: S.pedido.id });
+    if (fresh.ok) { S.pedido = fresh.pedido; S.pasos = fresh.pedido.pasos || {}; }
+    guardarSession();
+  } else {
+    showToast('Error al guardar cargo', 'error');
   }
 }
 
