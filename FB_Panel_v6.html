@@ -2030,9 +2030,13 @@ function irEdicion() { abrirEdicion(); }
 function renderSeguimiento() {
   const p = S.pedido; if (!p) return;
 
-  // Auto-marcar alta-epicor si es PG (no requiere factura → no requiere alta en EPICOR)
-  const esPGAuto = (p.razonSocial||'').toUpperCase() === 'PUBLICO EN GENERAL'
-    || S.pasos['fac-anticipo']?.noAplica;
+  // Auto-marcar alta-epicor solo si el cliente YA EXISTE (no es nuevo).
+  // Si es cliente nuevo (esNuevo='Sí'), necesita alta real en EPICOR aunque sea PG.
+  const esClienteExistente = p.esNuevo === 'No';
+  const esPGAuto = esClienteExistente && (
+    (p.razonSocial||'').toUpperCase() === 'PUBLICO EN GENERAL'
+    || S.pasos['fac-anticipo']?.noAplica
+  );
   if (esPGAuto && !S.pasos['alta-epicor']?.ok) {
     const ts = new Date().toLocaleString('es-MX');
     S.pasos['alta-epicor'] = { ok: true, ts, auto: true };
