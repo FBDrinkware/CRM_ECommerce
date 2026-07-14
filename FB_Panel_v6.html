@@ -531,12 +531,18 @@
     </div>
 
     <!-- SECCIÓN: Asesor -->
-    <div class="card">
+    <div class="card" id="card-asesor-resp">
       <div class="seccion">👤 Asesor responsable</div>
-      <div class="grid grid-cols-2 gap-3">
-    <div class="campo"><label>Código</label><input type="text" id="f-asesor-cod"></div>
-    <div class="campo"><label>Nombre</label><input type="text" id="f-asesor-nom"></div>
+      <div class="campo">
+        <label>Seleccionar asesor</label>
+        <select id="f-asesor-select" onchange="onAsesorSelectChange()"
+          class="border border-fb-light rounded-xl px-3 py-2 text-sm w-full outline-none focus:border-fb-dark">
+          <option value="">— Selecciona un asesor —</option>
+        </select>
       </div>
+      <!-- Campos ocultos que siguen siendo leídos por recogerDatos() -->
+      <input type="hidden" id="f-asesor-cod">
+      <input type="hidden" id="f-asesor-nom">
     </div>
 
     <div class="flex gap-3 mb-6">
@@ -943,6 +949,13 @@ function mostrarApp() {
   }
   if (['Admin','Editor'].includes(S.asesor.jerarquia)) {
     document.getElementById('card-nuevo-manual').style.display = 'block';
+    // Cargar lista de asesores para dropdown de reasignación
+    apiGet('getListaAsesores').then(res => {
+      if (res.ok) {
+        LISTA_ASESORES = res.asesores || [];
+        poblarDropdownAsesor(LISTA_ASESORES);
+      }
+    });
   }
   document.getElementById('f-asesor-cod').value = S.asesor.codigo;
   document.getElementById('f-asesor-nom').value = S.asesor.nombre;
@@ -963,7 +976,8 @@ let COT = {
   guardado: false,
 };
 
-let LISTA_FRIAS = []; // cache de ventas frias para WA de recuperacion
+let LISTA_FRIAS    = []; // cache de ventas frias para WA de recuperacion
+let LISTA_ASESORES = []; // cache de asesores activos para dropdown de reasignación
 
 function cotNueva() {
   COT = { num: null, lineas: [], guardado: false, otrosCargos: [] };
@@ -1432,7 +1446,7 @@ function renderLista(lista, contenedorId, esPorAtender) {
     <div class="pendiente-card" onclick="cargarPedidoDesdeListado('${p.id}')">
       <div class="flex items-start justify-between gap-2 flex-wrap">
         <div>
-          <div class="font-mono text-[10px] text-fb-silver">${p.id}</div>
+          <div class="font-mono text-[10px] text-fb-silver">${p.id}${p.asesorNombreReal||p.asesorNombre ? ' · ' + (p.asesorNombreReal||p.asesorNombre) : ''}</div>
           <div class="font-bold text-fb-dark text-sm mt-0.5">${/PUBLICO EN GENERAL/i.test(p.empresa||'') ? (p.contacto||p.empresa) : (p.empresa||p.contacto)}</div>
           <div class="text-xs text-fb-mid">${/PUBLICO EN GENERAL/i.test(p.empresa||'') ? (p.empresa||'') : (p.contacto||'')} ${p.ovEpicor ? "· " + p.ovEpicor : ""}</div>
         </div>
@@ -1544,7 +1558,7 @@ function renderPendientesPorEtapa(todos) {
       return `<div class="pendiente-card" onclick="cargarPedidoDesdeListado('${p.id}')">
         <div class="flex items-start justify-between gap-2">
           <div>
-            <div class="font-mono text-[10px] text-fb-silver">${p.id}</div>
+            <div class="font-mono text-[10px] text-fb-silver">${p.id}${p.asesorNombreReal||p.asesorNombre ? ' · ' + (p.asesorNombreReal||p.asesorNombre) : ''}</div>
             <div class="font-bold text-fb-dark text-sm">${nombre}</div>
             <div class="text-xs text-fb-mid">${esPG ? (p.empresa||'') : (p.contacto||'')} ${p.ovEpicor ? "· " + p.ovEpicor : ""}</div>
           </div>
@@ -1718,6 +1732,8 @@ function irCaptura() {
   // Asesor del pedido — editable, pre-llenado con el asesor original
   setVal('f-asesor-cod', p.asesorCodigo || S.asesor.codigo);
   setVal('f-asesor-nom', p.asesorNombreReal || p.asesorNombre || S.asesor.nombre);
+  // Preseleccionar en el dropdown si ya está cargada la lista
+  if (LISTA_ASESORES.length) poblarDropdownAsesor(LISTA_ASESORES);
   // Grabado y nombres — siempre
   const grabadoVal = p.grabado || p.grabadoPedido || '';
   const nombresVal = p.nombresIndividuales || p.nombresPorVaso || '';
@@ -3391,6 +3407,32 @@ async function guardarEnvio() {
   }
 }
 
+function poblarDropdownAsesor(lista) {
+  const sel = document.getElementById('f-asesor-select');
+  if (!sel) return;
+  const valorActual = document.getElementById('f-asesor-nom')?.value || '';
+  sel.innerHTML = '<option value="">— Selecciona un asesor —</option>' +
+    lista.map(a =>
+      `<option value="${a.codigo}|${a.nombre}" ${a.nombre === valorActual ? 'selected' : ''}>${a.nombre} (${a.codigo})</option>`
+    ).join('');
+  // Sincronizar campos ocultos con la selección actual
+  if (valorActual) {
+    const match = lista.find(a => a.nombre === valorActual);
+    if (match) {
+      document.getElementById('f-asesor-cod').value = match.codigo;
+      document.getElementById('f-asesor-nom').value = match.nombre;
+    }
+  }
+}
+
+function onAsesorSelectChange() {
+  const sel = document.getElementById('f-asesor-select');
+  if (!sel || !sel.value) return;
+  const [codigo, nombre] = sel.value.split('|');
+  document.getElementById('f-asesor-cod').value = codigo || '';
+  document.getElementById('f-asesor-nom').value = nombre || '';
+}
+
 function toggleCargoExtra(tipo) {
   const div = document.getElementById(`cargo-linea-${tipo}`);
   const btn = document.getElementById(`btn-toggle-cargo-${tipo}`);
@@ -3465,7 +3507,7 @@ function renderCerrados(lista) {
     return `<div class="pendiente-card" onclick="cargarPedidoDesdeListado('${p.id}')">
       <div class="flex items-start justify-between gap-2">
         <div>
-          <div class="font-mono text-[10px] text-fb-silver">${p.id}</div>
+          <div class="font-mono text-[10px] text-fb-silver">${p.id}${p.asesorNombreReal||p.asesorNombre ? ' · ' + (p.asesorNombreReal||p.asesorNombre) : ''}</div>
           <div class="font-bold text-fb-dark text-sm">${/PUBLICO EN GENERAL/i.test(p.empresa||'') ? (p.contacto||p.empresa) : (p.empresa||p.contacto)}</div>
           <div class="text-xs text-fb-mid">${/PUBLICO EN GENERAL/i.test(p.empresa||'') ? (p.empresa||'') : (p.contacto||'')} ${p.ovEpicor ? "· " + p.ovEpicor : ""}</div>
           ${p.numFactura ? `<div class="text-[10px] text-fb-silver mt-0.5">Factura: ${p.numFactura}</div>` : ''}
@@ -3497,7 +3539,7 @@ function renderTransito(lista) {
     return `<div class="pendiente-card" onclick="cargarPedidoDesdeListado('${p.id}')">
       <div class="flex items-start justify-between gap-2">
         <div>
-          <div class="font-mono text-[10px] text-fb-silver">${p.id}</div>
+          <div class="font-mono text-[10px] text-fb-silver">${p.id}${p.asesorNombreReal||p.asesorNombre ? ' · ' + (p.asesorNombreReal||p.asesorNombre) : ''}</div>
           <div class="font-bold text-fb-dark text-sm">${nombreGrande}</div>
           <div class="text-xs text-fb-mid">${nombreChico} ${p.ovEpicor ? '· ' + p.ovEpicor : ''}</div>
           ${fechaEnv ? `<div class="text-[10px] text-blue-500 mt-0.5">🚚${fechaEnv}</div>` : ''}
@@ -3530,7 +3572,7 @@ function renderMesAnterior(lista) {
     return `<div class="pendiente-card" onclick="cargarPedidoDesdeListado('${p.id}')">
       <div class="flex items-start justify-between gap-2">
         <div>
-          <div class="font-mono text-[10px] text-fb-silver">${p.id}</div>
+          <div class="font-mono text-[10px] text-fb-silver">${p.id}${p.asesorNombreReal||p.asesorNombre ? ' · ' + (p.asesorNombreReal||p.asesorNombre) : ''}</div>
           <div class="font-bold text-fb-dark text-sm">${nombreGrande}</div>
           <div class="text-xs text-fb-mid">${nombreChico} ${p.ovEpicor ? '· ' + p.ovEpicor : ''}</div>
           ${p.numFactura ? `<div class="text-[10px] text-fb-silver mt-0.5">Factura: ${p.numFactura}</div>` : ''}
@@ -3562,7 +3604,7 @@ function renderFrias(lista) {
     return `<div class="card-fria">
       <div class="flex items-start justify-between gap-2 mb-2">
         <div>
-          <div class="font-mono text-[10px] text-fb-silver">${p.id}</div>
+          <div class="font-mono text-[10px] text-fb-silver">${p.id}${p.asesorNombreReal||p.asesorNombre ? ' · ' + (p.asesorNombreReal||p.asesorNombre) : ''}</div>
           <div class="font-bold text-sm" style="color:#334e68">${nombreGrande}</div>
           <div class="text-xs text-fb-mid">${nombreChico} ${p.ovEpicor ? "· " + p.ovEpicor : ""}</div>
         </div>
