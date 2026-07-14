@@ -2030,18 +2030,15 @@ function irEdicion() { abrirEdicion(); }
 function renderSeguimiento() {
   const p = S.pedido; if (!p) return;
 
-  // Auto-marcar alta-epicor solo si el cliente YA EXISTE (no es nuevo).
-  // Si es cliente nuevo (esNuevo='Sí'), necesita alta real en EPICOR aunque sea PG.
+  // Auto-marcar alta-epicor solo si el cliente YA EXISTÍA en BD (alta.noAplica=true).
+  // Si es cliente nuevo, siempre necesita alta manual en EPICOR sin importar si es PG.
   const esClienteExistente = p.esNuevo === 'No';
-  const esPGAuto = esClienteExistente && (
-    (p.razonSocial||'').toUpperCase() === 'PUBLICO EN GENERAL'
-    || S.pasos['fac-anticipo']?.noAplica
-  );
+  const esPGAuto = esClienteExistente;
   if (esPGAuto && !S.pasos['alta-epicor']?.ok) {
     const ts = new Date().toLocaleString('es-MX');
     S.pasos['alta-epicor'] = { ok: true, ts, auto: true };
     apiPost({ action:'marcarPaso', fbk:p.id, paso:'alta-epicor',
-      valor:true, ts, quien:'Sistema (auto-PG)' });
+      valor:true, ts, quien:'Sistema (auto-cliente-existente)' });
   }
   document.getElementById('seg-vacio').style.display = 'none';
   document.getElementById('seg-contenido').style.display = 'block';
@@ -2348,7 +2345,7 @@ function renderPasos() {
               value="${numFact}" ${yaEntregado ? 'disabled' : ''}>
             ${!yaEntregado ? `<button onclick="guardarNumFactura()" class="btn-outline text-xs px-3 py-2 flex-shrink-0">Guardar</button>` : ''}
           </div>
-          ${numFact ? `<div class="text-[10px] text-fb-silver mt-1">Factura guardada: ${numFact}</div>` : ''}
+          ${numFact ? `<div class="text-[10px] font-bold mt-1" style="color:#184273;">✅ Factura guardada: ${numFact}</div>` : '<div class="text-[10px] text-fb-silver mt-1">Sin factura guardada aún</div>'}
         </div>
         <div class="flex items-center gap-3 mt-3">
           <input type="checkbox" id="chk-enviado" onchange="marcarPedidoEnviado(this)"
