@@ -878,7 +878,7 @@ const SCRIPT_URL  = 'https://script.google.com/macros/s/AKfycbz3NTwMATDsfpWuIa9x
 const TRELLO_URL  = 'https://trello.com/b/6467f392487974ce37e8eb16';
 const CLIP_URL    = 'https://dashboard.clip.mx/';
 let CORREOS = { alta:'', fac:'', prod:'' };
-let DATOS_BANCO = 'Banco: BBVA\nCuenta: COMPLETAR\nCLABE: COMPLETAR\nBeneficiario: FB Drinkware S.A. de C.V.\nReferencia: [Nombre del Cliente] + últimos 4 dígitos del FBK';
+let DATOS_BANCO = 'Banco: BBVA\nCuenta: COMPLETAR\nCLABE: COMPLETAR\nBeneficiario: FB Drinkware S.A. de C.V.';
 let WHATSAPP_NUM = '5219981951897';
 let CATALOGO_PRODS = [];
 let MAPA_TRANSFORMACIONES = {}; // SKU_ORIG (mayúsculas) → { skuProd, descProd }
@@ -2505,20 +2505,35 @@ function gmailFactura() {
 
 // Abrir modal de datos de transferencia (sin marcar nada en Sheets)
 function abrirModalTransferencia() {
-  if (!document.getElementById('modal-transf')) {
-    const m = document.createElement('div');
-    m.id = 'modal-transf';
-    m.className = 'modal-overlay';
-    m.innerHTML = `<div class="modal-box">
-      <h3 class="font-black text-fb-dark mb-4">Datos de transferencia</h3>
-      <pre class="bg-fb-cream rounded-xl p-4 text-xs font-mono whitespace-pre-wrap">${DATOS_BANCO}</pre>
-      <button onclick="navigator.clipboard.writeText(\`${DATOS_BANCO}\`);showToast('Datos copiados')"
-        class="btn-action btn-copy w-full justify-center mt-3">Copiar datos</button>
-      <button onclick="document.getElementById('modal-transf').style.display='none'"
-        class="w-full text-fb-silver text-xs font-bold mt-3 bg-transparent border-none cursor-pointer">Cerrar</button>
-    </div>`;
-    document.body.appendChild(m);
-  }
+  // Construir referencia dinámica con datos del pedido activo
+  const nombreCliente = S.pedido
+    ? (S.pedido.nombreComercial || S.pedido.razonSocial || S.pedido.nombreContacto || '').split(' ').slice(0,2).join(' ')
+    : '';
+  const ultimosCuatro = S.pedido?.id
+    ? S.pedido.id.toString().slice(-4)
+    : '';
+  const referencia = (nombreCliente || ultimosCuatro)
+    ? `\nReferencia: ${nombreCliente}${ultimosCuatro ? ' ' + ultimosCuatro : ''}`
+    : '';
+  const textoCompleto = DATOS_BANCO + referencia;
+
+  // Recrear modal siempre para que la referencia sea del pedido actual
+  const existente = document.getElementById('modal-transf');
+  if (existente) existente.remove();
+
+  const m = document.createElement('div');
+  m.id = 'modal-transf';
+  m.className = 'modal-overlay';
+  m.innerHTML = `<div class="modal-box">
+    <h3 class="font-black text-fb-dark mb-2">Datos de transferencia</h3>
+    <pre class="bg-fb-cream rounded-xl p-4 text-xs font-mono whitespace-pre-wrap">${textoCompleto}</pre>
+    ${referencia ? `<div class="text-[10px] text-fb-silver mt-1 mb-2">La referencia se genera automáticamente con el nombre del cliente y los últimos 4 dígitos del folio.</div>` : ''}
+    <button onclick="navigator.clipboard.writeText(\`${textoCompleto}\`);showToast('Datos copiados')"
+      class="btn-action btn-copy w-full justify-center mt-2">Copiar datos</button>
+    <button onclick="document.getElementById('modal-transf').style.display='none'"
+      class="w-full text-fb-silver text-xs font-bold mt-3 bg-transparent border-none cursor-pointer">Cerrar</button>
+  </div>`;
+  document.body.appendChild(m);
   document.getElementById('modal-transf').style.display = 'flex';
 }
 
