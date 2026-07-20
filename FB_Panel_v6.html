@@ -1696,9 +1696,12 @@ function irCaptura() {
         <span class="text-right font-bold">${pr.cantActual} · $${Number(pr.precioUnit).toFixed(2)}</span>
       </div>`;
     }).join('') +
-    `<div class="bg-fb-dark text-white px-3 py-2 text-xs font-bold text-right">
-      Total: $${Number(p.subtotal).toLocaleString('es-MX',{minimumFractionDigits:2})} MXN
+    (() => {
+      const totalPiezas = prods.reduce((s, pr) => s + (Number(pr.cantActual) || 0), 0);
+      return `<div class="bg-fb-dark text-white px-3 py-2 text-xs font-bold text-right">
+      Total: ${totalPiezas} pza${totalPiezas !== 1 ? 's' : ''} · $${Number(p.subtotal).toLocaleString('es-MX',{minimumFractionDigits:2})} MXN
     </div>`;
+    })();
 
   // Pre-llenar con datos del catálogo (Pedido Completo)
   setVal('f-rfc',       p.rfc       || p.rfcPedido);
