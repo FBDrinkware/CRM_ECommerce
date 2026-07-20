@@ -184,7 +184,7 @@
   <div class="card" id="card-transito" style="display:none">
     <button class="w-full text-left" onclick="toggleSeccion('transito')">
       <div class="flex items-center justify-between">
-        <div class="seccion mb-0" style="color:#0369a1;">🚚 Pedidos en tránsito <span id="cnt-transito" class="font-normal" style="color:#7dd3fc;"></span></div>
+        <div class="seccion mb-0" style="color:#0369a1;">🚚 Pedidos en tránsito <span id="cnt-transito" class="font-normal" style="color:#7dd3fc;"></span><span id="sum-transito" class="font-normal text-[11px] ml-2" style="color:#0369a1;"></span></div>
         <svg id="chev-transito" xmlns="http://www.w3.org/2000/svg" width="18" height="18" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5" style="transition:transform .2s;flex-shrink:0;transform:rotate(180deg)"><path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7"/></svg>
       </div>
     </button>
@@ -193,7 +193,7 @@
   <div class="card" id="card-cerrados" style="display:none">
     <button class="w-full text-left" onclick="toggleSeccion('cerrados')">
       <div class="flex items-center justify-between">
-        <div class="seccion mb-0">✅ Cerrados este mes <span id="cnt-cerrados" class="text-fb-silver font-normal"></span></div>
+        <div class="seccion mb-0">✅ Cerrados este mes <span id="cnt-cerrados" class="text-fb-silver font-normal"></span><span id="sum-cerrados" class="font-normal text-[11px] ml-2 text-fb-dark"></span></div>
         <svg id="chev-cerrados" xmlns="http://www.w3.org/2000/svg" width="18" height="18" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5" style="transition:transform .2s;flex-shrink:0"><path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7"/></svg>
       </div>
     </button>
@@ -202,7 +202,7 @@
   <div class="card" id="card-mes-anterior" style="display:none">
     <button class="w-full text-left" onclick="toggleSeccion('mes-anterior')">
       <div class="flex items-center justify-between">
-        <div class="seccion mb-0" style="color:#6b7280;">📁 Cerrados el mes pasado <span id="cnt-mes-anterior" class="text-fb-silver font-normal"></span></div>
+        <div class="seccion mb-0" style="color:#6b7280;">📁 Cerrados el mes pasado <span id="cnt-mes-anterior" class="text-fb-silver font-normal"></span><span id="sum-mes-anterior" class="font-normal text-[11px] ml-2" style="color:#6b7280;"></span></div>
         <svg id="chev-mes-anterior" xmlns="http://www.w3.org/2000/svg" width="18" height="18" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5" style="transition:transform .2s;flex-shrink:0"><path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7"/></svg>
       </div>
     </button>
@@ -211,7 +211,7 @@
   <div class="card" id="card-frias" style="display:none">
     <button class="w-full text-left" onclick="toggleSeccion('frias')">
       <div class="flex items-center justify-between">
-        <div class="seccion mb-0" style="color:#334e68;">🧊 Ventas frías <span id="cnt-frias" class="font-normal" style="color:#7b9bb5;"></span></div>
+        <div class="seccion mb-0" style="color:#334e68;">🧊 Ventas frías <span id="cnt-frias" class="font-normal" style="color:#7b9bb5;"></span><span id="sum-frias" class="font-normal text-[11px] ml-2" style="color:#7b9bb5;"></span></div>
         <svg id="chev-frias" xmlns="http://www.w3.org/2000/svg" width="18" height="18" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5" style="transition:transform .2s;flex-shrink:0"><path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7"/></svg>
       </div>
     </button>
@@ -1544,9 +1544,13 @@ function renderPendientesPorEtapa(todos) {
     if (sec.id === 's1') {
       items = [...items].sort((a, b) => (Number(b.subtotal) || 0) - (Number(a.subtotal) || 0));
     }
+    const totalSec = items.reduce((s, p) => s + (Number(p.subtotal) || 0), 0);
+    const totalStr = totalSec > 0
+      ? `<span class="font-normal text-[11px] ml-2" style="color:#184273;">· $${totalSec.toLocaleString('es-MX',{minimumFractionDigits:0,maximumFractionDigits:0})}</span>`
+      : '';
     out += `<div class="seccion-pendiente" style="color:#184273">
       <span style="background:${sec.color};padding:2px 8px;border-radius:8px;font-size:10px;">${sec.icon} ${sec.label}</span>
-      <span class="text-fb-silver font-normal ml-1">(${items.length})</span>
+      <span class="text-fb-silver font-normal ml-1">(${items.length})</span>${totalStr}
     </div>`;
     out += items.map(p => {
       const esPG   = /PUBLICO EN GENERAL/i.test(p.empresa||'');
@@ -3501,9 +3505,14 @@ function renderCerrados(lista) {
   const card = document.getElementById('card-cerrados');
   const div  = document.getElementById('lista-cerrados');
   const cnt  = document.getElementById('cnt-cerrados');
+  const sum  = document.getElementById('sum-cerrados');
   if (!lista || !lista.length) { card.style.display = 'none'; return; }
   card.style.display = 'block';
   if (cnt) cnt.textContent = '(' + lista.length + ')';
+  if (sum) {
+    const total = lista.reduce((s, p) => s + (Number(p.subtotal) || 0), 0);
+    sum.textContent = total > 0 ? '· $' + total.toLocaleString('es-MX', {minimumFractionDigits:0, maximumFractionDigits:0}) : '';
+  }
   // Empieza contraído
   div.style.display = 'none';
   document.getElementById('chev-cerrados').style.transform = 'rotate(0deg)';
@@ -3531,9 +3540,14 @@ function renderTransito(lista) {
   const card = document.getElementById('card-transito');
   const div  = document.getElementById('lista-transito');
   const cnt  = document.getElementById('cnt-transito');
+  const sum  = document.getElementById('sum-transito');
   if (!lista || !lista.length) { card.style.display = 'none'; return; }
   card.style.display = 'block';
   if (cnt) cnt.textContent = '(' + lista.length + ')';
+  if (sum) {
+    const total = lista.reduce((s, p) => s + (Number(p.subtotal) || 0), 0);
+    sum.textContent = total > 0 ? '· $' + total.toLocaleString('es-MX', {minimumFractionDigits:0, maximumFractionDigits:0}) : '';
+  }
   // Empieza expandido — es información urgente (pedidos en camino)
   div.style.display = 'block';
   document.getElementById('chev-transito').style.transform = 'rotate(180deg)';
@@ -3563,9 +3577,14 @@ function renderMesAnterior(lista) {
   const card = document.getElementById('card-mes-anterior');
   const div  = document.getElementById('lista-mes-anterior');
   const cnt  = document.getElementById('cnt-mes-anterior');
+  const sum  = document.getElementById('sum-mes-anterior');
   if (!lista || !lista.length) { card.style.display = 'none'; return; }
   card.style.display = 'block';
   if (cnt) cnt.textContent = '(' + lista.length + ')';
+  if (sum) {
+    const total = lista.reduce((s, p) => s + (Number(p.subtotal) || 0), 0);
+    sum.textContent = total > 0 ? '· $' + total.toLocaleString('es-MX', {minimumFractionDigits:0, maximumFractionDigits:0}) : '';
+  }
   // Empieza contraído — es histórico
   div.style.display = 'none';
   document.getElementById('chev-mes-anterior').style.transform = 'rotate(0deg)';
@@ -3597,9 +3616,14 @@ function renderFrias(lista) {
   const card = document.getElementById('card-frias');
   const div  = document.getElementById('lista-frias');
   const cnt  = document.getElementById('cnt-frias');
+  const sum  = document.getElementById('sum-frias');
   if (!lista || !lista.length) { card.style.display = 'none'; return; }
   card.style.display = 'block';
   if (cnt) cnt.textContent = '(' + lista.length + ')';
+  if (sum) {
+    const total = lista.reduce((s, p) => s + (Number(p.subtotal) || 0), 0);
+    sum.textContent = total > 0 ? '· $' + total.toLocaleString('es-MX', {minimumFractionDigits:0, maximumFractionDigits:0}) : '';
+  }
   // Empieza expandido para que el asesor lo vea de inmediato
   div.style.display = 'block';
   document.getElementById('chev-frias').style.transform = 'rotate(180deg)';
