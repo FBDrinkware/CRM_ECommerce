@@ -630,11 +630,8 @@
       <div id="pasos-contenedor"></div>
     </div>
 
-    <!-- Botón cancelar + venta fría -->
-    <div class="card">
-      <button onclick="abrirModalVentaFria()" class="w-full text-left text-sm font-bold text-[#334e68] bg-[#e0e7ef] hover:bg-[#cfd8e3] border border-[#b8c9d9] rounded-xl px-4 py-3 mb-2 transition-all">🧊 Marcar como venta fría</button>
-      <button onclick="abrirModalCancelar()" class="btn-danger w-full">❌ Cancelar pedido</button>
-    </div>
+    <!-- Botón cancelar + venta fría — renderizado dinámico desde renderBotonesCriticos() -->
+    <div id="card-botones-criticos"></div>
   </div>
 </div>
 
@@ -2176,6 +2173,7 @@ function renderSeguimiento() {
 
   renderPasos();
   renderPrimerContacto('seg');
+  renderBotonesCriticos();
 }
 
 function renderPasos() {
@@ -3650,6 +3648,47 @@ function renderFrias(lista) {
       </div>
     </div>`;
   }).join('');
+}
+
+function renderBotonesCriticos() {
+  const cont = document.getElementById('card-botones-criticos');
+  if (!cont || !S.pedido) return;
+
+  const p       = S.pedido;
+  const ps      = S.pasos || {};
+  const esAdmin = S.asesor.jerarquia === 'Admin';
+
+  // Venta fría: ocultar si el pago ya fue confirmado
+  const pagado        = !!(ps['pago']?.ok);
+  const mostrarFria   = !pagado;
+
+  // Cancelar: estados que requieren Admin
+  const estadosRestringidos = ['En producción', 'En camino', 'Entregado'];
+  const cancelRestringe     = estadosRestringidos.includes(p.estado);
+  const puedeCancel         = !cancelRestringe || esAdmin;
+
+  const btnFria = mostrarFria
+    ? `<button onclick="abrirModalVentaFria()"
+        class="w-full text-left text-sm font-bold text-[#334e68] bg-[#e0e7ef] hover:bg-[#cfd8e3] border border-[#b8c9d9] rounded-xl px-4 py-3 mb-2 transition-all">
+        🧊 Marcar como venta fría
+      </button>`
+    : '';
+
+  const btnCancel = puedeCancel
+    ? `<button onclick="abrirModalCancelar()" class="btn-danger w-full">❌ Cancelar pedido</button>`
+    : `<div class="relative group w-full">
+        <button disabled
+          class="btn-danger w-full opacity-40 cursor-not-allowed">❌ Cancelar pedido</button>
+        <div class="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-3 py-1.5 bg-fb-dark text-white text-[11px] rounded-lg whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-10">
+          Requiere autorización de Admin
+        </div>
+      </div>`;
+
+  // Si no hay nada que mostrar (pago confirmado + admin puede cancelar pero estado no restringido
+  // → siempre hay al menos el botón cancelar), renderizar la card
+  cont.innerHTML = (btnFria || btnCancel)
+    ? `<div class="card">${btnFria}${btnCancel}</div>`
+    : '';
 }
 
 function abrirModalVentaFria() {
