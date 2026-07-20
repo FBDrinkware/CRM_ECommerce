@@ -2368,8 +2368,8 @@ function renderPasos() {
           <div class="flex gap-2 items-center mt-1">
             <input type="text" id="inp-num-factura" placeholder="Ej: F-2026-00123"
               class="flex-1 border border-fb-light rounded-xl px-3 py-2 text-sm outline-none focus:border-fb-dark"
-              value="${numFact}" ${yaEntregado ? 'disabled' : ''}>
-            ${!yaEntregado ? `<button onclick="guardarNumFactura()" class="btn-outline text-xs px-3 py-2 flex-shrink-0">Guardar</button>` : ''}
+              value="${numFact}">
+            <button onclick="guardarNumFactura()" class="btn-outline text-xs px-3 py-2 flex-shrink-0">Guardar</button>
           </div>
           ${numFact ? `<div class="text-[10px] font-bold mt-1" style="color:#184273;">✅ Factura guardada: ${numFact}</div>` : '<div class="text-[10px] text-fb-silver mt-1">Sin factura guardada aún</div>'}
         </div>
