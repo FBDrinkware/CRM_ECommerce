@@ -3508,7 +3508,7 @@ function renderCerrados(lista) {
   card.style.display = 'block';
   if (cnt) cnt.textContent = '(' + lista.length + ')';
   if (sum) {
-    const total = lista.reduce((s, p) => s + (Number(p.subtotal) || 0), 0);
+    const total = lista.filter(p => p.estado !== 'Cancelado').reduce((s, p) => s + (Number(p.subtotal) || 0), 0);
     sum.textContent = total > 0 ? '· $' + total.toLocaleString('es-MX', {minimumFractionDigits:0, maximumFractionDigits:0}) : '';
   }
   // Empieza contraído
@@ -3580,7 +3580,7 @@ function renderMesAnterior(lista) {
   card.style.display = 'block';
   if (cnt) cnt.textContent = '(' + lista.length + ')';
   if (sum) {
-    const total = lista.reduce((s, p) => s + (Number(p.subtotal) || 0), 0);
+    const total = lista.filter(p => p.estado !== 'Cancelado').reduce((s, p) => s + (Number(p.subtotal) || 0), 0);
     sum.textContent = total > 0 ? '· $' + total.toLocaleString('es-MX', {minimumFractionDigits:0, maximumFractionDigits:0}) : '';
   }
   // Empieza contraído — es histórico
