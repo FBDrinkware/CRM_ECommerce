@@ -3834,6 +3834,7 @@ function abrirModalDescuento() {
 
   if (esAdmin) {
     _descCodigoValidado = true;
+    _descMaxPct = 100;
     descInicializarConfig();
   } else {
     document.getElementById('inp-desc-codigo').value = '';
@@ -3845,12 +3846,13 @@ async function validarCodigoDescuento() {
   const codigo = (document.getElementById('inp-desc-codigo')?.value || '').trim().toUpperCase();
   if (!codigo) return showToast('Ingresa el código de autorización', 'error');
   showLoading('Validando código...');
-  const res = await apiPost({ action: 'validarCodigoDescuento', codigo });
+  const res = await apiGet('validarCodigoDescuento', { codigo });
   hideLoading();
-  if (!res.ok) return showToast(res.error || 'Código inválido', 'error');
+  if (!res || !res.ok) return showToast((res && res.error) || 'Código inválido', 'error');
 
   _descCodigoValidado = true;
-  _descMaxPct = Number(res.maxPct) || 100;
+  _descMaxPct = Number(res.maxPct) || 0;
+  if (_descMaxPct <= 0) return showToast('El código no tiene un límite de descuento válido', 'error');
 
   // Mostrar info del límite y pasar al paso config
   const infoEl = document.getElementById('desc-max-info');
@@ -3984,13 +3986,13 @@ async function confirmarDescuento() {
     if (!lineas.length) return showToast('Ingresa al menos un porcentaje', 'error');
   }
 
-  // Validar límite maxPct
+  // Validar límite maxPct (solo Editores tienen límite; Admin tiene _descMaxPct = 100)
   const maxUsado = Math.max(...lineas.map(l => l.pct));
-  if (maxUsado > _descMaxPct) return showToast(`El descuento máximo permitido es ${_descMaxPct}%`, 'error');
+  if (_descMaxPct > 0 && maxUsado > _descMaxPct) return showToast(`El descuento máximo permitido es ${_descMaxPct}%`, 'error');
 
   const codigo = (document.getElementById('inp-desc-codigo')?.value || '').trim().toUpperCase() || null;
   showLoading('Aplicando descuento...');
-  const res = await apiPost({
+  const res = await apiPostWithData({
     action: 'aplicarDescuento',
     fbk: S.pedido.id,
     lineas,
@@ -3998,17 +4000,18 @@ async function confirmarDescuento() {
     quien: S.asesor.nombre,
   });
   hideLoading();
-  if (!res.ok) return showToast(res.error || 'Error al aplicar descuento', 'error');
+  if (!res || !res.ok) return showToast((res && res.error) || 'Error al aplicar descuento', 'error');
 
   cerrarModal('modal-descuento');
   showToast('Descuento aplicado correctamente');
   // Recargar pedido para reflejar nuevos precios
   showLoading('Actualizando...');
-  const r2 = await apiGet({ action: 'getPedido', fbk: S.pedido.id });
+  const r2 = await apiGet('getPedido', { fbk: S.pedido.id });
   hideLoading();
-  if (r2.ok) {
+  if (r2 && r2.ok && r2.pedido) {
     S.pedido = r2.pedido;
     S.pasos = r2.pedido.pasos || {};
+    S.pedido.productos = r2.pedido.productos || [];
     renderSeguimiento();
   }
 }
@@ -4019,9 +4022,8 @@ async function generarCodigoDescuento() {
   const vigenciaMin = parseInt(document.getElementById('admin-desc-vigencia')?.value) || 60;
   if (!maxPct || maxPct <= 0 || maxPct > 100) return showToast('Ingresa un máximo entre 1 y 100%', 'error');
   showLoading('Generando código...');
-  const res = await apiPost({
-    action: 'generarCodigoDescuento',
-    quien: S.asesor.nombre,
+  const res = await apiGet('generarCodigoDescuento', {
+    quien: encodeURIComponent(S.asesor.nombre),
     maxPct,
     vigenciaMin,
   });
