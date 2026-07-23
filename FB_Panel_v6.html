@@ -592,6 +592,13 @@
       <div class="seccion">📦 Productos</div>
       <div id="seg-alerta-stock" style="display:none;margin-bottom:10px;background:#fff7ed;border:1px solid #fed7aa;border-radius:10px;padding:9px 13px;font-size:12px;font-weight:700;color:#c2410c"></div>
       <div id="seg-tabla-prods" class="text-xs rounded-xl overflow-hidden border border-fb-light"></div>
+      <!-- Botón descuento - renderizado dinámico -->
+      <div id="seg-btn-descuento" style="display:none" class="mt-3">
+        <button onclick="abrirModalDescuento()"
+          class="w-full text-left text-sm font-bold text-[#166534] bg-[#dcfce7] hover:bg-[#bbf7d0] border border-[#86efac] rounded-xl px-4 py-3 transition-all">
+          Aplicar descuento
+        </button>
+      </div>
     </div>
 
     <!-- ── CHECKLIST PRIMER CONTACTO (Seguimiento) ── -->
@@ -642,6 +649,39 @@
     <p class="text-xs text-fb-silver mb-4">Acceso completo a todos los pedidos y métricas del equipo.</p>
     <a href="https://docs.google.com/spreadsheets/d/15gIhiK1jpMcXM8uVCpq6nWZqVNcUO3O--e8acrOIe58" target="_blank"
        class="btn-outline text-sm inline-block text-center w-full">📊 Abrir Sheets completo</a>
+  </div>
+
+  <!-- Generar código de descuento -->
+  <div class="card">
+    <div class="seccion">Generar código de descuento</div>
+    <p class="text-xs text-fb-silver mb-3">Genera un código de un solo uso para que un Editor pueda aplicar un descuento en un pedido activo.</p>
+    <div class="flex gap-2 mb-3">
+      <div class="campo flex-1">
+        <label>Descuento máximo permitido (%)</label>
+        <input type="number" id="admin-desc-max" min="1" max="100" step="1" placeholder="Ej: 15"
+          class="border border-fb-light rounded-xl px-3 py-2 text-sm w-full outline-none focus:border-fb-dark">
+      </div>
+      <div class="campo flex-1">
+        <label>Vigencia</label>
+        <select id="admin-desc-vigencia"
+          class="border border-fb-light rounded-xl px-3 py-2 text-sm w-full outline-none">
+          <option value="15">15 minutos</option>
+          <option value="30">30 minutos</option>
+          <option value="60" selected>1 hora</option>
+          <option value="240">4 horas</option>
+          <option value="360">6 horas</option>
+          <option value="720">12 horas</option>
+          <option value="1440">24 horas</option>
+        </select>
+      </div>
+    </div>
+    <button onclick="generarCodigoDescuento()" class="btn-primary w-full text-sm">Generar código</button>
+    <div id="admin-codigo-resultado" style="display:none" class="mt-3 bg-green-50 border border-green-200 rounded-xl p-4 text-center">
+      <div class="text-[11px] text-fb-silver mb-1">Código generado — comparte con el asesor</div>
+      <div id="admin-codigo-valor" class="text-2xl font-black text-fb-dark tracking-widest mb-1"></div>
+      <div id="admin-codigo-info" class="text-[11px] text-fb-silver"></div>
+      <button onclick="copiarCodigoAdmin()" class="btn-outline text-xs mt-2 w-full">Copiar código</button>
+    </div>
   </div>
 </div>
 
@@ -763,6 +803,66 @@
 </div><!-- /app-principal -->
 
 <!-- ══ MODAL CANCELAR ══ -->
+<!-- ══ MODAL DESCUENTO ══ -->
+<div class="modal-overlay" id="modal-descuento" style="display:none">
+  <div class="modal-box" style="max-width:420px;width:100%">
+    <h3 class="font-black text-fb-dark text-base mb-1">Aplicar descuento</h3>
+    <p class="text-xs text-fb-silver mb-3" id="desc-modal-subtitulo">Ingresa el código de autorización para continuar.</p>
+
+    <!-- PASO 1: Código (solo Editor) -->
+    <div id="desc-paso-codigo">
+      <div class="campo mb-3">
+        <label>Código de autorización</label>
+        <input type="text" id="inp-desc-codigo" placeholder="Ej: DESC-A3X9"
+          class="border border-fb-light rounded-xl px-3 py-2 text-sm w-full outline-none focus:border-fb-dark uppercase"
+          oninput="this.value=this.value.toUpperCase()">
+      </div>
+      <button onclick="validarCodigoDescuento()" class="btn-primary w-full text-sm">Validar código</button>
+      <button onclick="cerrarModal('modal-descuento')" class="w-full text-fb-silver text-xs font-bold mt-3 bg-transparent border-none cursor-pointer">Cancelar</button>
+    </div>
+
+    <!-- PASO 2: Configurar descuento (visible tras validar código o para Admin) -->
+    <div id="desc-paso-config" style="display:none">
+      <div id="desc-max-info" class="text-[11px] text-green-700 font-bold mb-3 bg-green-50 border border-green-200 rounded-lg px-3 py-2" style="display:none"></div>
+
+      <!-- Tipo de descuento -->
+      <div class="campo mb-3">
+        <label>Tipo de descuento</label>
+        <select id="desc-tipo" onchange="descActualizarTipo()"
+          class="border border-fb-light rounded-xl px-3 py-2 text-sm w-full outline-none">
+          <option value="pct-linea">Porcentaje por línea</option>
+          <option value="pct-global">Porcentaje global (todas las líneas)</option>
+          <option value="monto-global">Monto fijo global (se convierte a %)</option>
+        </select>
+      </div>
+
+      <!-- Descuento global (pct o monto) -->
+      <div id="desc-campo-global" class="campo mb-3" style="display:none">
+        <label id="desc-label-global">Porcentaje de descuento (%)</label>
+        <input type="number" id="inp-desc-global" min="0" max="100" step="0.01"
+          placeholder="Ej: 10" oninput="descActualizarPreview()"
+          class="border border-fb-light rounded-xl px-3 py-2 text-sm w-full outline-none focus:border-fb-dark">
+      </div>
+
+      <!-- Descuento por línea -->
+      <div id="desc-campo-lineas" style="display:none">
+        <div class="text-[11px] font-bold text-fb-mid uppercase mb-2">Descuento por producto</div>
+        <div id="desc-lineas-lista" class="space-y-2 mb-3"></div>
+      </div>
+
+      <!-- Preview -->
+      <div id="desc-preview" class="bg-fb-cream rounded-xl p-3 mb-3 text-xs" style="display:none">
+        <div class="font-bold text-fb-dark mb-1">Vista previa</div>
+        <div id="desc-preview-lineas" class="space-y-1"></div>
+        <div id="desc-preview-total" class="font-bold text-fb-dark border-t border-fb-light mt-2 pt-2"></div>
+      </div>
+
+      <button onclick="confirmarDescuento()" class="btn-primary w-full text-sm mb-2">Aplicar descuento</button>
+      <button onclick="cerrarModal('modal-descuento')" class="w-full text-fb-silver text-xs font-bold bg-transparent border-none cursor-pointer">Cancelar</button>
+    </div>
+  </div>
+</div>
+
 <div class="modal-overlay" id="modal-cancelar" style="display:none">
   <div class="modal-box">
     <h3 class="font-black text-fb-dark text-base mb-3">❌ Cancelar pedido</h3>
@@ -1214,6 +1314,7 @@ async function cotConvertirPedido() {
     productos: COT.lineas.map(l=>({
       sku: l.sku, descripcion: l.desc,
       cantidad: l.cant, precioUnit: l.precioEdit,
+      precioBase: l.precioBase,
     })),
     cotNum: COT.num || '',
   });
@@ -2155,10 +2256,18 @@ function renderSeguimiento() {
         const badgeUlt = esUltimas
           ? `<span style="display:inline-block;margin-left:5px;background:#ea580c;color:#fff;font-size:9px;font-weight:900;padding:1px 6px;border-radius:5px;text-transform:uppercase;vertical-align:middle;">⚠ Últimas</span>`
           : '';
+        // Descuento por línea
+        const tieneDesc = pr.precioOrig && Number(pr.precioOrig) > 0 && Number(pr.descAcum) > 0;
+        const precioDisplay = tieneDesc
+          ? `<span class="line-through text-fb-silver mr-1">$${Number(pr.precioOrig).toFixed(2)}</span><span class="text-green-700 font-bold">$${Number(pr.precioUnit).toFixed(2)}</span>`
+          : `<span>$${Number(pr.precioUnit).toFixed(2)}</span>`;
+        const badgeDesc = tieneDesc
+          ? `<span style="display:inline-block;margin-left:4px;background:#16a34a;color:#fff;font-size:9px;font-weight:900;padding:1px 5px;border-radius:5px;">-${Number(pr.descAcum).toFixed(0)}%</span>`
+          : '';
         return `<div class="grid grid-cols-4 px-3 py-2 text-xs ${i % 2 === 0 ? '' : 'bg-fb-cream'}">
           <span class="font-mono text-fb-mid">${pr.sku}</span>
-          <span class="col-span-2">${pr.descripcion}${badgeUlt}</span>
-          <span class="text-right font-bold">${pr.cantActual} · $${Number(pr.precioUnit).toFixed(2)}</span>
+          <span class="col-span-2">${pr.descripcion}${badgeUlt}${badgeDesc}</span>
+          <span class="text-right">${pr.cantActual} · ${precioDisplay}</span>
         </div>`;
       }).join('') +
       (() => {
@@ -2174,6 +2283,14 @@ function renderSeguimiento() {
   renderPasos();
   renderPrimerContacto('seg');
   renderBotonesCriticos();
+  // Boton descuento: visible si pago no confirmado y Admin o Editor
+  const btnDesc = document.getElementById('seg-btn-descuento');
+  if (btnDesc) {
+    const pagado = !!(S.pasos && S.pasos['pago'] && S.pasos['pago'].ok);
+    const jerarquia = (S.asesor && S.asesor.jerarquia) || '';
+    const puedeDesc = !pagado && (jerarquia === 'Admin' || jerarquia === 'Editor');
+    btnDesc.style.display = puedeDesc ? 'block' : 'none';
+  }
 }
 
 function renderPasos() {
@@ -2539,7 +2656,10 @@ function abrirModalTransferencia() {
   const referencia = (nombreCliente || ultimosCuatro)
     ? `\nReferencia: ${nombreCliente}${ultimosCuatro ? ' ' + ultimosCuatro : ''}`
     : '';
-  const textoCompleto = DATOS_BANCO + referencia;
+  const totalPagar = S.pedido?.subtotal
+    ? `\nTotal a pagar: $${Number(S.pedido.subtotal).toLocaleString('es-MX',{minimumFractionDigits:2})} MXN`
+    : '';
+  const textoCompleto = DATOS_BANCO + referencia + totalPagar;
 
   // Recrear modal siempre para que la referencia sea del pedido actual
   const existente = document.getElementById('modal-transf');
@@ -3689,6 +3809,235 @@ function renderBotonesCriticos() {
   cont.innerHTML = (btnFria || btnCancel)
     ? `<div class="card">${btnFria}${btnCancel}</div>`
     : '';
+}
+
+// ════════════════════════════════════════════════════
+// DESCUENTOS
+// ════════════════════════════════════════════════════
+
+let _descCodigoValidado = false;
+let _descMaxPct = 100; // máximo permitido por el código
+
+function abrirModalDescuento() {
+  if (!S.pedido) return;
+  _descCodigoValidado = false;
+  _descMaxPct = 100;
+  const esAdmin = S.asesor.jerarquia === 'Admin';
+
+  // Admin omite el paso de código
+  document.getElementById('desc-paso-codigo').style.display = esAdmin ? 'none' : 'block';
+  document.getElementById('desc-paso-config').style.display = esAdmin ? 'block' : 'none';
+  document.getElementById('desc-max-info').style.display = 'none';
+  document.getElementById('desc-modal-subtitulo').textContent = esAdmin
+    ? 'Configura el descuento a aplicar en este pedido.'
+    : 'Ingresa el código de autorización para continuar.';
+
+  if (esAdmin) {
+    _descCodigoValidado = true;
+    descInicializarConfig();
+  } else {
+    document.getElementById('inp-desc-codigo').value = '';
+  }
+  document.getElementById('modal-descuento').style.display = 'flex';
+}
+
+async function validarCodigoDescuento() {
+  const codigo = (document.getElementById('inp-desc-codigo')?.value || '').trim().toUpperCase();
+  if (!codigo) return showToast('Ingresa el código de autorización', 'error');
+  showLoading('Validando código...');
+  const res = await apiPost({ action: 'validarCodigoDescuento', codigo });
+  hideLoading();
+  if (!res.ok) return showToast(res.error || 'Código inválido', 'error');
+
+  _descCodigoValidado = true;
+  _descMaxPct = Number(res.maxPct) || 100;
+
+  // Mostrar info del límite y pasar al paso config
+  const infoEl = document.getElementById('desc-max-info');
+  infoEl.textContent = `Código válido. Descuento máximo permitido: ${_descMaxPct}%`;
+  infoEl.style.display = 'block';
+  document.getElementById('desc-paso-codigo').style.display = 'none';
+  document.getElementById('desc-paso-config').style.display = 'block';
+  descInicializarConfig();
+}
+
+function descInicializarConfig() {
+  // Resetear campos
+  const tipo = document.getElementById('desc-tipo');
+  if (tipo) tipo.value = 'pct-linea';
+  const inpGlobal = document.getElementById('inp-desc-global');
+  if (inpGlobal) inpGlobal.value = '';
+  document.getElementById('desc-preview').style.display = 'none';
+  descActualizarTipo();
+}
+
+function descActualizarTipo() {
+  const tipo = document.getElementById('desc-tipo').value;
+  const campoGlobal = document.getElementById('desc-campo-global');
+  const campoLineas = document.getElementById('desc-campo-lineas');
+  const labelGlobal = document.getElementById('desc-label-global');
+
+  if (tipo === 'pct-linea') {
+    campoGlobal.style.display = 'none';
+    campoLineas.style.display = 'block';
+    // Renderizar inputs por SKU
+    const prods = (S.pedido?.productos || []).filter(pr => pr.sku && Number(pr.cantActual) > 0);
+    document.getElementById('desc-lineas-lista').innerHTML = prods.map(pr => `
+      <div class="flex items-center gap-2">
+        <span class="font-mono text-[11px] text-fb-mid w-20 flex-shrink-0">${pr.sku}</span>
+        <span class="text-xs text-fb-dark flex-1 truncate">${pr.descripcion}</span>
+        <div class="flex items-center gap-1 flex-shrink-0">
+          <input type="number" min="0" max="${_descMaxPct}" step="0.01" placeholder="0"
+            data-sku="${pr.sku}"
+            class="desc-linea-pct border border-fb-light rounded-lg px-2 py-1 text-xs w-16 outline-none text-right"
+            oninput="descActualizarPreview()">
+          <span class="text-xs text-fb-silver">%</span>
+        </div>
+      </div>`).join('');
+  } else {
+    campoLineas.style.display = 'none';
+    campoGlobal.style.display = 'block';
+    labelGlobal.textContent = tipo === 'monto-global'
+      ? 'Monto de descuento ($)'
+      : 'Porcentaje de descuento (%)';
+    document.getElementById('inp-desc-global').max = tipo === 'monto-global' ? '' : _descMaxPct;
+  }
+  descActualizarPreview();
+}
+
+function descActualizarPreview() {
+  const tipo = document.getElementById('desc-tipo').value;
+  const prods = (S.pedido?.productos || []).filter(pr => pr.sku && Number(pr.cantActual) > 0);
+  if (!prods.length) return;
+
+  const subtotalActual = prods.reduce((s, pr) => s + (Number(pr.precioUnit) * Number(pr.cantActual)), 0);
+  let lineasDesc = []; // [{sku, pctEfectivo}]
+
+  if (tipo === 'pct-global') {
+    const pct = Math.min(parseFloat(document.getElementById('inp-desc-global').value) || 0, _descMaxPct);
+    lineasDesc = prods.map(pr => ({ sku: pr.sku, pctEfectivo: pct }));
+  } else if (tipo === 'monto-global') {
+    const monto = parseFloat(document.getElementById('inp-desc-global').value) || 0;
+    // Convertir monto a % sobre subtotal actual
+    const pctEquiv = subtotalActual > 0 ? Math.min((monto / subtotalActual) * 100, _descMaxPct) : 0;
+    lineasDesc = prods.map(pr => ({ sku: pr.sku, pctEfectivo: pctEquiv }));
+  } else {
+    // por línea
+    const inputs = document.querySelectorAll('.desc-linea-pct');
+    inputs.forEach(inp => {
+      const pct = Math.min(parseFloat(inp.value) || 0, _descMaxPct);
+      if (pct > 0) lineasDesc.push({ sku: inp.dataset.sku, pctEfectivo: pct });
+    });
+  }
+
+  if (!lineasDesc.some(l => l.pctEfectivo > 0)) {
+    document.getElementById('desc-preview').style.display = 'none';
+    return;
+  }
+
+  let nuevoSubtotal = 0;
+  const linesHtml = prods.map(pr => {
+    const ld = lineasDesc.find(l => l.sku === pr.sku);
+    const pct = ld ? ld.pctEfectivo : 0;
+    const precioActual = Number(pr.precioUnit);
+    const nuevoPrecio = pct > 0 ? Math.round(precioActual * (1 - pct / 100) * 100) / 100 : precioActual;
+    const nuevoTotal = nuevoPrecio * Number(pr.cantActual);
+    nuevoSubtotal += nuevoTotal;
+    if (pct === 0) return '';
+    return `<div class="flex justify-between text-[11px]">
+      <span class="text-fb-mid">${pr.sku} ×${pr.cantActual}</span>
+      <span><span class="line-through text-fb-silver mr-1">$${precioActual.toFixed(2)}</span>
+      <span class="text-green-700 font-bold">$${nuevoPrecio.toFixed(2)}</span>
+      <span class="text-green-700 ml-1">(-${pct.toFixed(0)}%)</span></span>
+    </div>`;
+  }).filter(Boolean).join('');
+
+  document.getElementById('desc-preview-lineas').innerHTML = linesHtml;
+  document.getElementById('desc-preview-total').textContent =
+    `Nuevo total: $${nuevoSubtotal.toLocaleString('es-MX', {minimumFractionDigits:2})} MXN`;
+  document.getElementById('desc-preview').style.display = 'block';
+}
+
+async function confirmarDescuento() {
+  if (!_descCodigoValidado) return showToast('Valida el código primero', 'error');
+  const tipo = document.getElementById('desc-tipo').value;
+  const prods = (S.pedido?.productos || []).filter(pr => pr.sku && Number(pr.cantActual) > 0);
+  const subtotalActual = prods.reduce((s, pr) => s + (Number(pr.precioUnit) * Number(pr.cantActual)), 0);
+  let lineas = [];
+
+  if (tipo === 'pct-global') {
+    const pct = Math.min(parseFloat(document.getElementById('inp-desc-global').value) || 0, _descMaxPct);
+    if (pct <= 0) return showToast('Ingresa un porcentaje mayor a 0', 'error');
+    lineas = [{ sku: '__GLOBAL__', pct }];
+  } else if (tipo === 'monto-global') {
+    const monto = parseFloat(document.getElementById('inp-desc-global').value) || 0;
+    if (monto <= 0) return showToast('Ingresa un monto mayor a 0', 'error');
+    const pctEquiv = subtotalActual > 0 ? Math.min((monto / subtotalActual) * 100, _descMaxPct) : 0;
+    if (pctEquiv <= 0) return showToast('Monto inválido', 'error');
+    lineas = [{ sku: '__GLOBAL__', pct: Math.round(pctEquiv * 100) / 100 }];
+  } else {
+    const inputs = document.querySelectorAll('.desc-linea-pct');
+    inputs.forEach(inp => {
+      const pct = Math.min(parseFloat(inp.value) || 0, _descMaxPct);
+      if (pct > 0) lineas.push({ sku: inp.dataset.sku, pct });
+    });
+    if (!lineas.length) return showToast('Ingresa al menos un porcentaje', 'error');
+  }
+
+  // Validar límite maxPct
+  const maxUsado = Math.max(...lineas.map(l => l.pct));
+  if (maxUsado > _descMaxPct) return showToast(`El descuento máximo permitido es ${_descMaxPct}%`, 'error');
+
+  const codigo = (document.getElementById('inp-desc-codigo')?.value || '').trim().toUpperCase() || null;
+  showLoading('Aplicando descuento...');
+  const res = await apiPost({
+    action: 'aplicarDescuento',
+    fbk: S.pedido.id,
+    lineas,
+    codigo: S.asesor.jerarquia === 'Admin' ? null : codigo,
+    quien: S.asesor.nombre,
+  });
+  hideLoading();
+  if (!res.ok) return showToast(res.error || 'Error al aplicar descuento', 'error');
+
+  cerrarModal('modal-descuento');
+  showToast('Descuento aplicado correctamente');
+  // Recargar pedido para reflejar nuevos precios
+  showLoading('Actualizando...');
+  const r2 = await apiGet({ action: 'getPedido', fbk: S.pedido.id });
+  hideLoading();
+  if (r2.ok) {
+    S.pedido = r2.pedido;
+    S.pasos = r2.pedido.pasos || {};
+    renderSeguimiento();
+  }
+}
+
+// ── Generar código desde tab Admin ──
+async function generarCodigoDescuento() {
+  const maxPct = parseInt(document.getElementById('admin-desc-max')?.value) || 0;
+  const vigenciaMin = parseInt(document.getElementById('admin-desc-vigencia')?.value) || 60;
+  if (!maxPct || maxPct <= 0 || maxPct > 100) return showToast('Ingresa un máximo entre 1 y 100%', 'error');
+  showLoading('Generando código...');
+  const res = await apiPost({
+    action: 'generarCodigoDescuento',
+    quien: S.asesor.nombre,
+    maxPct,
+    vigenciaMin,
+  });
+  hideLoading();
+  if (!res.ok) return showToast(res.error || 'Error al generar código', 'error');
+
+  document.getElementById('admin-codigo-valor').textContent = res.codigo;
+  const vigLabel = {15:'15 min',30:'30 min',60:'1 hora',240:'4 horas',360:'6 horas',720:'12 horas',1440:'24 horas'};
+  document.getElementById('admin-codigo-info').textContent =
+    `Máx: ${res.maxPct}% · Vigencia: ${vigLabel[vigenciaMin]||vigenciaMin+' min'} · Expira: ${res.expira}`;
+  document.getElementById('admin-codigo-resultado').style.display = 'block';
+}
+
+function copiarCodigoAdmin() {
+  const codigo = document.getElementById('admin-codigo-valor')?.textContent || '';
+  if (codigo) { navigator.clipboard.writeText(codigo); showToast('Código copiado'); }
 }
 
 function abrirModalVentaFria() {
