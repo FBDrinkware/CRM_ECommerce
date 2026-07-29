@@ -2341,6 +2341,13 @@ function renderPasos() {
         const esPG      = (p.razonSocial||'').toUpperCase() === 'PUBLICO EN GENERAL';
         const yaOk      = !!(ps['fac-anticipo']?.ok);        // Gmail enviado
         const noAplica  = !!(ps['fac-anticipo']?.noAplica);  // marcado como no aplica
+        // Auto-persistir si es PG y aún no está guardado
+        if (esPG && !yaOk && !noAplica) {
+          const tsAuto = new Date().toLocaleString('es-MX');
+          S.pasos['fac-anticipo'] = { ok: true, ts: tsAuto, noAplica: true };
+          apiPost({ action:'marcarPaso', fbk:p.id, paso:'fac-anticipo',
+            valor:true, ts:tsAuto, quien:'Sistema', noAplica:true });
+        }
         const checked   = esPG || noAplica ? 'checked' : '';
         const disabled  = esPG || yaOk     ? 'disabled' : '';
         const label     = esPG
@@ -2719,7 +2726,7 @@ function gmailDiseno() {
   if (!p) return;
 
   const aplicaTransf = (p.grabado === 'Sí' || p.nombresIndividuales === 'Sí' || p.nombresPorVaso === 'Sí');
-  const prods = (p.productos||[]).map(pr => {
+  const prods = (p.productos||[]).filter(pr => Number(pr.cantActual) > 0).map(pr => {
     const skuOrig  = (pr.sku||'').toString().trim();
     const transf   = aplicaTransf ? (MAPA_TRANSFORMACIONES[skuOrig.toUpperCase()] || null) : null;
     const skuFinal = transf?.skuProd  || skuOrig;
@@ -2808,7 +2815,7 @@ function confirmarEnvioProduccion() {
     ? 'PENDIENTE — se enviará en respuesta a este correo'
     : `${p.dirEnvio}, ${p.ciudadEnvio||''}, ${p.estadoEnvio||''} C.P. ${p.cpEnvio||''}`;
   const aplicaTransfProd = (p.grabado === 'Sí' || p.nombresIndividuales === 'Sí' || p.nombresPorVaso === 'Sí');
-  const prods = (p.productos||[]).map(pr => {
+  const prods = (p.productos||[]).filter(pr => Number(pr.cantActual) > 0).map(pr => {
     const skuOrig   = (pr.sku||'').toString().trim();
     const transf    = aplicaTransfProd ? (MAPA_TRANSFORMACIONES[skuOrig.toUpperCase()]||null) : null;
     const skuFinal  = transf?.skuProd  || skuOrig;
@@ -4449,7 +4456,7 @@ function abrirModalDatosOV() {
   document.getElementById('ov-fecha').textContent    = fmtFecha(p.fechaLimite);
 
   const fmt   = n => Number(n).toLocaleString('es-MX',{minimumFractionDigits:2,maximumFractionDigits:2});
-  const prods = p.productos || [];
+  const prods = (p.productos || []).filter(pr => Number(pr.cantActual) > 0);
   // Solo aplica transformación si el pedido lleva grabado o nombres
   const aplicaTransf = (p.grabado === 'Sí' || p.nombresIndividuales === 'Sí' || p.nombresPorVaso === 'Sí');
 
@@ -4520,7 +4527,7 @@ function abrirModalDatosOV() {
 function copiarTablaEPICOR() {
   const p = S.pedido;
   if (!p) return;
-  const prods = p.productos || [];
+  const prods = (p.productos || []).filter(pr => Number(pr.cantActual) > 0);
   const aplicaTransf = (p.grabado === 'Sí' || p.nombresIndividuales === 'Sí' || p.nombresPorVaso === 'Sí');
   const rows = prods.map(pr => {
     const skuOrig    = (pr.sku || '').toString().trim();
@@ -4541,7 +4548,7 @@ function copiarTablaOV() {
   const p = S.pedido;
   if (!p) return;
   const fmt  = n => Number(n).toLocaleString('es-MX',{minimumFractionDigits:2,maximumFractionDigits:2});
-  const prods = p.productos || [];
+  const prods = (p.productos || []).filter(pr => Number(pr.cantActual) > 0);
   const aplicaTransf = (p.grabado === 'Sí' || p.nombresIndividuales === 'Sí' || p.nombresPorVaso === 'Sí');
   let lines = [];
   lines.push(`DATOS OV — ${p.razonSocial||p.nombreComercial||p.nombreContacto} (${p.id})`);
