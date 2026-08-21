@@ -1273,7 +1273,7 @@ async function cotGuardar() {
   });
 
   showLoading('Guardando cotización...');
-  const res = await apiPost({
+  const res = await apiPostWithData({
     action:   'guardarCotizacion',
     asesor:   S.asesor.correo,
     asesorNom: S.asesor.nombre,
@@ -1307,7 +1307,7 @@ async function cotConvertirPedido() {
   if (!confirm(`¿Convertir esta cotización en pedido para ${cliente}? Se creará un nuevo FBK en el panel.`)) return;
   document.getElementById('cot-status').textContent = 'Creando pedido...';
   showLoading('Creando pedido...');
-  const res = await apiPost({
+  const res = await apiPostWithData({
     action:   'cotizacionAPedido',
     asesor:   S.asesor.codigo,
     asesorNombre: S.asesor.nombre,
