@@ -602,6 +602,13 @@
           Aplicar descuento
         </button>
       </div>
+      <!-- Botón cotización PDF desde seguimiento -->
+      <div class="mt-2">
+        <button onclick="abrirModalCotPedido()"
+          class="w-full text-left text-sm font-bold text-[#1e40af] bg-[#eff6ff] hover:bg-[#dbeafe] border border-[#93c5fd] rounded-xl px-4 py-3 transition-all">
+          📄 Generar cotización PDF
+        </button>
+      </div>
     </div>
 
     <!-- ── CHECKLIST PRIMER CONTACTO (Seguimiento) ── -->
@@ -1490,6 +1497,261 @@ function cotGenerarPDF() {
 
   // Abrir ventana e imprimir como PDF
   const win = window.open('','_blank','width=900,height=700');
+  win.document.write(htmlPDF);
+  win.document.close();
+  win.onload = () => { win.focus(); win.print(); };
+}
+
+// ── COTIZACIÓN PDF DESDE SEGUIMIENTO ─────────────────────────
+
+// SKUs que corresponden a cargos adicionales (no son productos físicos)
+const SKUS_CARGOS = ['ENVIO','CARGO-DISENO','CARGO-GRABADO','CARGO-URGENCIA','CARGO-OTROS'];
+
+function _esCargo(sku) {
+  return SKUS_CARGOS.includes((sku||'').toString().toUpperCase());
+}
+
+// Etiqueta legible para cada tipo de cargo
+function _labelCargo(prod) {
+  const sku = (prod.sku||'').toString().toUpperCase();
+  if (sku === 'ENVIO') return 'Gastos de envío';
+  // Descripción guardada ej: "Gastos de Envio · Juan Carlos López" — tomar solo la primera parte
+  const descBase = (prod.descripcion||prod.sku||'Cargo adicional').split('·')[0].trim();
+  return descBase;
+}
+
+function abrirModalCotPedido() {
+  const p = S.pedido;
+  if (!p) return;
+
+  // ── Jerarquía de nombre: empresa → nombreContacto → razonSocial
+  const clienteNombre = (p.empresa||'').trim()
+    || (p.nombreContacto||'').trim()
+    || (p.razonSocial||'').trim()
+    || 'Cliente';
+
+  // ── Calcular vigencia: fecha del pedido + 14 días
+  let vigenciaStr = '';
+  try {
+    // Fecha en formato DD/MM/YYYY o DD/M/YYYY
+    const partes = (p.fecha||'').toString().split('/');
+    if (partes.length === 3) {
+      const base = new Date(
+        parseInt(partes[2]), parseInt(partes[1]) - 1, parseInt(partes[0])
+      );
+      base.setDate(base.getDate() + 14);
+      vigenciaStr = base.toISOString().split('T')[0]; // YYYY-MM-DD para input date
+    }
+  } catch(e) {}
+  if (!vigenciaStr) {
+    // Fallback: hoy + 14
+    const hoy = new Date();
+    hoy.setDate(hoy.getDate() + 14);
+    vigenciaStr = hoy.toISOString().split('T')[0];
+  }
+
+  // ── Precarga campos del modal
+  document.getElementById('mcot-cliente').value  = clienteNombre;
+  document.getElementById('mcot-vigencia').value = vigenciaStr;
+  document.getElementById('mcot-nota').value     =
+    'Nuestros precios incluyen IVA. El costo unitario incluye un solo grabado.';
+
+  // ── Construir resumen de líneas
+  const prods   = (p.productos||[]).filter(pr => !_esCargo(pr.sku));
+  const cargos  = (p.productos||[]).filter(pr =>  _esCargo(pr.sku));
+  const fmt = n => Number(n).toLocaleString('es-MX', {minimumFractionDigits:2});
+
+  // Descuento: si tiene precioOrig (BQ) y difiere del precio actual
+  const filasProd = prods.map(pr => {
+    const precioOrig = Number(pr.precioOrig||0);
+    const precioAct  = Number(pr.precioUnit||pr.precioUnitario||0);
+    const cant       = Number(pr.cantActual||pr.cantOriginal||pr.cantidad||0);
+    const total      = cant * precioAct;
+    const tieneDesc  = precioOrig > 0 && precioOrig !== precioAct;
+    return `<div class="flex justify-between items-start px-3 py-2 gap-2">
+      <div class="flex-1 min-w-0">
+        <span class="font-mono text-fb-silver mr-1">${pr.sku||'—'}</span>
+        <span class="truncate">${pr.descripcion||pr.descripcionProd||'—'}</span>
+        ${tieneDesc ? `<span class="ml-1 text-[10px] text-fb-silver line-through">$${fmt(precioOrig)}</span>` : ''}
+      </div>
+      <div class="text-right flex-shrink-0">
+        <div class="font-bold">$${fmt(total)}</div>
+        <div class="text-fb-silver text-[10px]">${cant} × $${fmt(precioAct)}</div>
+      </div>
+    </div>`;
+  }).join('');
+
+  const filasCargo = cargos.map(pr => {
+    const monto = Number(pr.total||pr.precioUnit||pr.precioUnitario||0);
+    return `<div class="flex justify-between items-center px-3 py-2 gap-2 bg-[#f0f4ff]">
+      <span class="text-fb-mid">${_labelCargo(pr)}</span>
+      <span class="font-bold">$${fmt(monto)}</span>
+    </div>`;
+  }).join('');
+
+  document.getElementById('mcot-resumen').innerHTML =
+    (filasProd || '<div class="px-3 py-2 text-fb-silver">Sin productos</div>') +
+    (filasCargo || '');
+
+  // ── Total general
+  const totalProds  = prods.reduce((s, pr) => {
+    const cant = Number(pr.cantActual||pr.cantOriginal||pr.cantidad||0);
+    return s + cant * Number(pr.precioUnit||pr.precioUnitario||0);
+  }, 0);
+  const totalCargos = cargos.reduce((s, pr) =>
+    s + Number(pr.total||pr.precioUnit||pr.precioUnitario||0), 0);
+  const totalGeneral = totalProds + totalCargos;
+  document.getElementById('mcot-total').textContent =
+    '$' + totalGeneral.toLocaleString('es-MX', {minimumFractionDigits:2}) + ' MXN';
+
+  document.getElementById('modal-cot-pedido').style.display = 'flex';
+}
+
+function generarCotPedidoPDF() {
+  const p        = S.pedido;
+  const cliente  = document.getElementById('mcot-cliente').value.trim() || 'Cliente';
+  const vigencia = document.getElementById('mcot-vigencia').value;
+  const nota     = document.getElementById('mcot-nota').value.trim();
+  const fbk      = p.id || ('FBK-' + Date.now());
+  const fmt      = n => Number(n).toLocaleString('es-MX', {minimumFractionDigits:2});
+  const fmtF     = d => {
+    if (!d) return '—';
+    if (d.includes('-')) { const [y,m,dd] = d.split('-'); return `${dd}/${m}/${y}`; }
+    return d;
+  };
+
+  const prods  = (p.productos||[]).filter(pr => !_esCargo(pr.sku));
+  const cargos = (p.productos||[]).filter(pr =>  _esCargo(pr.sku));
+
+  // ── Calcular totales
+  let totalConIVA = 0;
+  prods.forEach(pr => {
+    const cant = Number(pr.cantActual||pr.cantOriginal||pr.cantidad||0);
+    totalConIVA += cant * Number(pr.precioUnit||pr.precioUnitario||0);
+  });
+  const totalCargos  = cargos.reduce((s, pr) =>
+    s + Number(pr.total||pr.precioUnit||pr.precioUnitario||0), 0);
+  const subSinIVA    = totalConIVA / 1.16;
+  const iva          = totalConIVA - subSinIVA;
+  const totalGeneral = totalConIVA + totalCargos;
+
+  // ── Filas de productos con descuento si aplica
+  const filasProds = prods.map((pr, i) => {
+    const cant       = Number(pr.cantActual||pr.cantOriginal||pr.cantidad||0);
+    const precioAct  = Number(pr.precioUnit||pr.precioUnitario||0);
+    const precioOrig = Number(pr.precioOrig||0);
+    const totalLinea = cant * precioAct;
+    const tieneDesc  = precioOrig > 0 && precioOrig !== precioAct;
+    const pctDesc    = tieneDesc ? Math.round((1 - precioAct/precioOrig)*100) : 0;
+    const precioCell = tieneDesc
+      ? `<span style="text-decoration:line-through;color:#aaa;font-size:10px">$${fmt(precioOrig)}</span>
+         <span style="color:#16a34a;font-weight:700;display:block">$${fmt(precioAct)}</span>`
+      : `$${fmt(precioAct)}`;
+    return `<tr style="background:${i%2===0?'#f8f9fb':'#fff'}">
+      <td style="padding:8px 10px;font-size:11px;color:#555">${pr.sku||'—'}</td>
+      <td style="padding:8px 10px;font-size:11px">${pr.descripcion||pr.descripcionProd||'—'}</td>
+      <td style="padding:8px 10px;font-size:11px;text-align:center">${cant}</td>
+      <td style="padding:8px 10px;font-size:11px;text-align:right">${precioCell}</td>
+      <td style="padding:8px 10px;font-size:11px;text-align:center">${tieneDesc ? pctDesc+'%' : '—'}</td>
+      <td style="padding:8px 10px;font-size:11px;text-align:right;font-weight:600">$${fmt(totalLinea)}</td>
+    </tr>`;
+  }).join('');
+
+  // ── Filas de cargos adicionales (misma tabla, fondo diferenciado)
+  const filasCargos = cargos.map(pr => {
+    const monto = Number(pr.total||pr.precioUnit||pr.precioUnitario||0);
+    return `<tr style="background:#eff6ff">
+      <td style="padding:8px 10px;font-size:11px;color:#555">${pr.sku||'—'}</td>
+      <td style="padding:8px 10px;font-size:11px;color:#1e40af;font-weight:600" colspan="4">${_labelCargo(pr)}</td>
+      <td style="padding:8px 10px;font-size:11px;text-align:right;font-weight:600">$${fmt(monto)}</td>
+    </tr>`;
+  }).join('');
+
+  // ── HTML del PDF
+  const htmlPDF = `<!DOCTYPE html><html><head><meta charset="utf-8">
+  <style>
+    *{box-sizing:border-box;margin:0;padding:0}
+    body{font-family:Arial,sans-serif;font-size:12px;color:#1a2744;background:#fff}
+    .header{background:#1a2744;padding:24px 32px;display:flex;justify-content:space-between;align-items:center}
+    .header-title{color:#fff;font-size:26px;font-weight:700}
+    .header-logo{color:#fff;font-size:13px;text-align:right;line-height:1.6}
+    .body{padding:28px 32px}
+    .meta{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:24px}
+    .meta-block{background:#f8f9fb;border-radius:8px;padding:12px 16px}
+    .meta-label{font-size:10px;color:#888;text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px}
+    .meta-val{font-size:13px;font-weight:600}
+    .meta-val-sm{font-size:11px;color:#444;margin-top:2px}
+    table{width:100%;border-collapse:collapse;margin-bottom:20px}
+    th{background:#1a2744;color:#fff;padding:9px 10px;font-size:11px;text-align:left}
+    th:nth-child(3){text-align:center}
+    th:nth-child(4),th:nth-child(5),th:nth-child(6){text-align:right}
+    .totals{max-width:280px;margin-left:auto;border-top:2px solid #1a2744;padding-top:12px}
+    .tot-row{display:flex;justify-content:space-between;font-size:11px;padding:3px 0;color:#555}
+    .tot-row.final{font-size:14px;font-weight:700;color:#1a2744;border-top:1px solid #ddd;margin-top:6px;padding-top:6px}
+    .nota{background:#f8f9fb;border-left:3px solid #1a2744;padding:10px 14px;border-radius:0 6px 6px 0;margin-top:20px}
+    .nota-title{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px}
+    .nota-text{font-size:11px;color:#444;line-height:1.5}
+    .footer{margin-top:32px;border-top:1px solid #e0e0e0;padding-top:12px;display:flex;justify-content:space-between}
+    .footer-txt{font-size:10px;color:#999}
+    @media print{body{-webkit-print-color-adjust:exact;print-color-adjust:exact}}
+  </style></head><body>
+  <div class="header">
+    <div class="header-title">Cotización</div>
+    <div class="header-logo">
+      <img src="https://i.ibb.co/JJkc7fk/Logo.png" alt="FB Drinkware"
+        style="height:44px;filter:brightness(0) invert(1);display:block;margin-bottom:4px;margin-left:auto">
+      998 395 4858<br>fbdrinkware.com.mx
+    </div>
+  </div>
+  <div class="body">
+    <div class="meta">
+      <div class="meta-block">
+        <div class="meta-label">Cliente</div>
+        <div class="meta-val">${cliente}</div>
+        ${p.correo  ? `<div class="meta-val-sm">${p.correo}</div>`   : ''}
+        ${p.telefono? `<div class="meta-val-sm">${p.telefono}</div>` : ''}
+      </div>
+      <div class="meta-block">
+        <div class="meta-label">Datos de cotización</div>
+        <div class="meta-val">${fbk}</div>
+        <div class="meta-val-sm">Fecha: ${fmtF(new Date().toISOString().split('T')[0])}</div>
+        <div class="meta-val-sm">Vigencia: ${fmtF(vigencia)}</div>
+        <div class="meta-val-sm">Asesor: ${S.asesor.nombre}</div>
+      </div>
+    </div>
+    <table>
+      <thead><tr>
+        <th>SKU</th>
+        <th>Concepto</th>
+        <th style="text-align:center">Piezas</th>
+        <th style="text-align:right">P. Unitario</th>
+        <th style="text-align:right">Desc.</th>
+        <th style="text-align:right">Total</th>
+      </tr></thead>
+      <tbody>
+        ${filasProds}
+        ${filasCargos}
+      </tbody>
+    </table>
+    <div class="totals">
+      <div class="tot-row"><span>Subtotal s/IVA</span><span>$${fmt(subSinIVA)}</span></div>
+      <div class="tot-row"><span>IVA (16%)</span><span>$${fmt(iva)}</span></div>
+      ${cargos.map(pr => {
+        const monto = Number(pr.total||pr.precioUnit||pr.precioUnitario||0);
+        return `<div class="tot-row"><span>${_labelCargo(pr)}</span><span>$${fmt(monto)}</span></div>`;
+      }).join('')}
+      <div class="tot-row final"><span>TOTAL</span><span>$${fmt(totalGeneral)}</span></div>
+    </div>
+    ${nota ? `<div class="nota"><div class="nota-title">Nota</div><div class="nota-text">${nota}</div></div>` : ''}
+    <div class="footer">
+      <span class="footer-txt">${fbk} · Generado ${new Date().toLocaleDateString('es-MX')}</span>
+      <span class="footer-txt">FB Drinkware · fbdrinkware.com.mx</span>
+    </div>
+  </div>
+  </body></html>`;
+
+  cerrarModal('modal-cot-pedido');
+  const win = window.open('', '_blank', 'width=900,height=700');
   win.document.write(htmlPDF);
   win.document.close();
   win.onload = () => { win.focus(); win.print(); };
@@ -4715,6 +4977,47 @@ function copiarTablaOV() {
     <h3 class="font-black text-fb-dark text-base mb-3">📂 Mis cotizaciones</h3>
     <div class="cot-hist-body max-h-64 overflow-y-auto mb-4"></div>
     <button onclick="cerrarModal('modal-historial-cot')" class="btn-outline w-full text-xs">Cerrar</button>
+  </div>
+</div>
+
+<!-- ══ MODAL: Cotización PDF desde Seguimiento ══ -->
+<div class="modal-overlay" id="modal-cot-pedido" style="display:none">
+  <div class="modal-box" style="max-width:520px;width:96%">
+    <h3 class="font-black text-fb-dark text-base mb-1">📄 Generar cotización PDF</h3>
+    <p class="text-[11px] text-fb-silver mb-4">Revisa y ajusta los datos antes de generar. El PDF se descarga localmente.</p>
+
+    <!-- Campos editables -->
+    <div class="space-y-3 mb-4">
+      <div class="campo">
+        <label>Nombre / Empresa</label>
+        <input type="text" id="mcot-cliente" class="w-full">
+      </div>
+      <div class="campo">
+        <label>Vigencia</label>
+        <input type="date" id="mcot-vigencia" class="w-full">
+      </div>
+      <div class="campo">
+        <label>Nota al pie</label>
+        <textarea id="mcot-nota" rows="2" class="w-full border border-fb-light rounded-xl px-3 py-2 text-xs outline-none focus:border-fb-dark resize-none"></textarea>
+      </div>
+    </div>
+
+    <!-- Resumen de líneas detectadas (solo lectura) -->
+    <div class="mb-4">
+      <div class="text-[10px] font-bold text-fb-silver uppercase tracking-wide mb-2">Productos y cargos detectados</div>
+      <div id="mcot-resumen" class="bg-[#f8f9fb] rounded-xl border border-fb-light divide-y divide-fb-light text-xs max-h-48 overflow-y-auto"></div>
+    </div>
+
+    <!-- Total calculado -->
+    <div class="flex justify-between items-center bg-fb-dark text-white rounded-xl px-4 py-2 text-sm font-bold mb-4">
+      <span>Total cotización</span>
+      <span id="mcot-total">$0.00</span>
+    </div>
+
+    <div class="flex gap-2">
+      <button onclick="cerrarModal('modal-cot-pedido')" class="btn-outline flex-1 text-sm">Cancelar</button>
+      <button onclick="generarCotPedidoPDF()" class="btn-primary flex-1 text-sm">Generar PDF</button>
+    </div>
   </div>
 </div>
 
