@@ -1366,64 +1366,59 @@ function _renderHistorialCot() {
   const filtro = _COT_FILTRO_ACTIVO;
   const datos  = filtro === 'Todas'
     ? _COT_HISTORIAL_DATA
-    : _COT_HISTORIAL_DATA.filter(c => (c.estado||'Activa') === filtro);
+    : _COT_HISTORIAL_DATA.filter(function(c){ return (c.estado||'Activa') === filtro; });
 
   // ── Pestañas ──
-  const tabs = ['Todas', ...COT_ESTADOS];
-  const tabsHtml = tabs.map(t => {
+  const tabs = ['Todas'].concat(COT_ESTADOS);
+  var tabsHtml = '';
+  tabs.forEach(function(t) {
     const count = t === 'Todas'
       ? _COT_HISTORIAL_DATA.length
-      : _COT_HISTORIAL_DATA.filter(c=>(c.estado||'Activa')===t).length;
-    const activa = t === filtro;
-    return `<button data-filtro="${t.replace(/"/g,'&quot;')}" onclick="_setCotFiltroBtn(this)"
-      style="font-size:10px;padding:4px 10px;border-radius:20px;border:none;cursor:pointer;white-space:nowrap;
-      ${activa ? 'background:#1a2744;color:#fff;font-weight:700' : 'background:#f3f4f6;color:#555'}"
-    >${t} (${count})</button>`;
-  }).join('');
+      : _COT_HISTORIAL_DATA.filter(function(c){ return (c.estado||'Activa')===t; }).length;
+    const esActiva = t === filtro;
+    const estilo = esActiva
+      ? 'font-size:10px;padding:4px 10px;border-radius:20px;border:none;cursor:pointer;white-space:nowrap;background:#1a2744;color:#fff;font-weight:700'
+      : 'font-size:10px;padding:4px 10px;border-radius:20px;border:none;cursor:pointer;white-space:nowrap;background:#f3f4f6;color:#555';
+    tabsHtml += '<button data-filtro="' + t.replace(/"/g,'&quot;') + '" onclick="_setCotFiltroBtn(this)" style="' + estilo + '">' + t + ' (' + count + ')</button>';
+  });
 
   // ── Tarjetas ──
-  const tarjetas = datos.length === 0
-    ? '<p class="text-xs text-fb-silver text-center py-4">Sin cotizaciones en esta categoría.</p>'
-    : datos.map(c => {
-        const estado  = c.estado || 'Activa';
-        const badge   = COT_ESTADO_BADGE[estado] || 'background:#f3f4f6;color:#555';
-        const tieneTel = !!(c.tel || '').toString().trim();
-        return `<div style="border-bottom:1px solid #e5e7eb;padding:10px 0">
-          <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px">
-            <div style="flex:1;min-width:0">
-              <div style="font-size:10px;font-weight:700;color:#1a2744">${c.num}</div>
-              <div style="font-size:12px;font-weight:600;color:#1a2744;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${c.cliente}</div>
-              <div style="font-size:10px;color:#9ca3af">${c.fecha} · ${c.total}</div>
-            </div>
-            <span style="font-size:10px;font-weight:700;padding:2px 8px;border-radius:20px;flex-shrink:0;${badge}">${estado}</span>
-          </div>
-          <div style="display:flex;gap:6px;margin-top:8px;flex-wrap:wrap">
-            <button onclick="cotCargar('${c.num}')"
-              style="font-size:11px;padding:4px 10px;border-radius:8px;border:1px solid #d1d5db;background:#fff;cursor:pointer;font-weight:600">
-              📂 Abrir
-            </button>
-            <button
-              data-cot-num="${c.num}"
-              data-cot-estado="${estado.replace(/"/g,'&quot;')}"
-              onclick="_abrirCambioEstadoCotBtn(this)"
-              style="font-size:11px;padding:4px 10px;border-radius:8px;border:1px solid #d1d5db;background:#fff;cursor:pointer;font-weight:600">
-              🔄 Estado
-            </button>
-            <button
-              data-wa-num="${c.num}"
-              data-wa-cliente="${(c.cliente||'').replace(/"/g,'&quot;')}"
-              data-wa-total="${(c.total||'').replace(/"/g,'&quot;')}"
-              data-wa-tel="${(c.tel||'').toString().replace(/"/g,'&quot;')}"
-              onclick="_abrirWACotBtn(this)"
-              style="font-size:11px;padding:4px 10px;border-radius:8px;border:1px solid #86efac;background:#dcfce7;cursor:pointer;font-weight:600;color:#166534">
-              💬 WhatsApp${tieneTel ? '' : ' ⚠'}
-            </button>
-          </div>
-        </div>`;
-      }).join('');
+  var tarjetas = '';
+  if (datos.length === 0) {
+    tarjetas = '<p style="font-size:12px;color:#9ca3af;text-align:center;padding:16px 0">Sin cotizaciones en esta categoría.</p>';
+  } else {
+    datos.forEach(function(c) {
+      const estado   = c.estado || 'Activa';
+      const badge    = COT_ESTADO_BADGE[estado] || 'background:#f3f4f6;color:#555';
+      const tieneTel = !!(c.tel || '').toString().trim();
+      const waAviso  = tieneTel ? '' : ' ⚠';
+      const numSafe     = (c.num    ||'').replace(/"/g,'&quot;');
+      const clienteSafe = (c.cliente||'').replace(/"/g,'&quot;');
+      const totalSafe   = (c.total  ||'').replace(/"/g,'&quot;');
+      const telSafe     = (c.tel    ||'').toString().replace(/"/g,'&quot;');
+      const estadoSafe  = estado.replace(/"/g,'&quot;');
+
+      tarjetas +=
+        '<div style="border-bottom:1px solid #e5e7eb;padding:10px 0">' +
+          '<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px">' +
+            '<div style="flex:1;min-width:0">' +
+              '<div style="font-size:10px;font-weight:700;color:#1a2744">' + (c.num||'') + '</div>' +
+              '<div style="font-size:12px;font-weight:600;color:#1a2744;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + (c.cliente||'') + '</div>' +
+              '<div style="font-size:10px;color:#9ca3af">' + (c.fecha||'') + ' · ' + (c.total||'') + '</div>' +
+            '</div>' +
+            '<span style="font-size:10px;font-weight:700;padding:2px 8px;border-radius:20px;flex-shrink:0;' + badge + '">' + estado + '</span>' +
+          '</div>' +
+          '<div style="display:flex;gap:6px;margin-top:8px;flex-wrap:wrap">' +
+            '<button onclick="cotCargar(\'' + numSafe + '\')" style="font-size:11px;padding:4px 10px;border-radius:8px;border:1px solid #d1d5db;background:#fff;cursor:pointer;font-weight:600">📂 Abrir</button>' +
+            '<button data-cot-num="' + numSafe + '" data-cot-estado="' + estadoSafe + '" onclick="_abrirCambioEstadoCotBtn(this)" style="font-size:11px;padding:4px 10px;border-radius:8px;border:1px solid #d1d5db;background:#fff;cursor:pointer;font-weight:600">🔄 Estado</button>' +
+            '<button data-wa-num="' + numSafe + '" data-wa-cliente="' + clienteSafe + '" data-wa-total="' + totalSafe + '" data-wa-tel="' + telSafe + '" onclick="_abrirWACotBtn(this)" style="font-size:11px;padding:4px 10px;border-radius:8px;border:1px solid #86efac;background:#dcfce7;cursor:pointer;font-weight:600;color:#166534">💬 WhatsApp' + waAviso + '</button>' +
+          '</div>' +
+        '</div>';
+    });
+  }
 
   document.getElementById('cot-hist-tabs').innerHTML =
-    `<div style="display:flex;gap:6px;flex-wrap:wrap;padding-bottom:10px;border-bottom:1px solid #e5e7eb;margin-bottom:8px">${tabsHtml}</div>`;
+    '<div style="display:flex;gap:6px;flex-wrap:wrap;padding-bottom:10px;border-bottom:1px solid #e5e7eb;margin-bottom:8px">' + tabsHtml + '</div>';
   document.getElementById('cot-hist-body').innerHTML = tarjetas;
 }
 
