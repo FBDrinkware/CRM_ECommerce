@@ -1352,14 +1352,38 @@ let _COT_FILTRO_ACTIVO  = 'Todas';
 
 async function cotHistorial() {
   showLoading('Cargando historial...');
-  const res = await apiGet('getCotizaciones', { asesor: S.asesor.correo });
-  hideLoading();
-  if (!res.ok) { showToast('Error al cargar historial'); return; }
-  if (!res.cotizaciones?.length) { showToast('Sin cotizaciones guardadas'); return; }
-  _COT_HISTORIAL_DATA  = res.cotizaciones;
-  _COT_FILTRO_ACTIVO   = 'Todas';
-  _renderHistorialCot();
-  document.getElementById('modal-historial-cot').style.display = 'flex';
+  try {
+    const res = await apiGet('getCotizaciones', { asesor: S.asesor?.correo || '' });
+    hideLoading();
+    if (!res || !res.ok) {
+      showToast('Error al cargar historial: ' + (res?.error || 'sin respuesta'));
+      return;
+    }
+    const lista = res.cotizaciones || [];
+    if (!lista.length) {
+      showToast('Sin cotizaciones guardadas');
+      return;
+    }
+    // Normalizar campos faltantes para compatibilidad con versiones anteriores del backend
+    _COT_HISTORIAL_DATA = lista.map(function(c) {
+      return {
+        num:     (c.num    || '').toString(),
+        fecha:   (c.fecha  || '').toString(),
+        asesor:  (c.asesor || '').toString(),
+        cliente: (c.cliente|| '').toString(),
+        total:   (c.total  || '').toString(),
+        estado:  (c.estado || 'Activa').toString(),
+        tel:     (c.tel    || '').toString(),
+      };
+    });
+    _COT_FILTRO_ACTIVO = 'Todas';
+    _renderHistorialCot();
+    document.getElementById('modal-historial-cot').style.display = 'flex';
+  } catch(err) {
+    hideLoading();
+    showToast('Error inesperado: ' + err.message);
+    console.error('cotHistorial error:', err);
+  }
 }
 
 function _renderHistorialCot() {
