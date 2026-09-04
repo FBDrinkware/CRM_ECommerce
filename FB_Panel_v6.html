@@ -990,7 +990,7 @@
 const SCRIPT_URL  = 'https://script.google.com/macros/s/AKfycbz3NTwMATDsfpWuIa9xGH6ndB6MMihkEiO7jn-SFeGi9OZpkR4yEY_zPyIfIKnpGUBu/exec';
 const TRELLO_URL  = 'https://trello.com/b/6467f392487974ce37e8eb16';
 const CLIP_URL    = 'https://dashboard.clip.mx/';
-let CORREOS = { alta:'', fac:'', prod:'' };
+let CORREOS = { alta:'', fac:'', prod:'', dis:'' };
 let DATOS_BANCO = 'Banco: BBVA\nCuenta: COMPLETAR\nCLABE: COMPLETAR\nBeneficiario: FB Drinkware S.A. de C.V.';
 let WHATSAPP_NUM = '5219981951897';
 let CATALOGO_PRODS = [];
@@ -1326,7 +1326,7 @@ async function cotConvertirPedido() {
       cantidad: l.cant, precioUnit: l.precioEdit,
       precioBase: l.precioBase,
     })),
-    cotNum: COT.num || '',
+    numCot: COT.num || '',  // para marcar automáticamente como Convertida en Sheets
   });
   hideLoading();
   if (res.ok) {
@@ -1337,23 +1337,174 @@ async function cotConvertirPedido() {
   }
 }
 
+// ── ESTADOS DE COTIZACIÓN ────────────────────────────────────
+const COT_ESTADOS = ['Activa','En seguimiento','En negociación','Cancelada/Fría','Convertida'];
+const COT_ESTADO_BADGE = {
+  'Activa':          'background:#dbeafe;color:#1e40af',
+  'En seguimiento':  'background:#fef9c3;color:#854d0e',
+  'En negociación':  'background:#ffedd5;color:#9a3412',
+  'Cancelada/Fría':  'background:#f3f4f6;color:#6b7280',
+  'Convertida':      'background:#dcfce7;color:#166534',
+};
+
+let _COT_HISTORIAL_DATA = []; // caché de cotizaciones cargadas
+let _COT_FILTRO_ACTIVO  = 'Todas';
+
 async function cotHistorial() {
-  showToast('Cargando historial...');
   showLoading('Cargando historial...');
   const res = await apiGet('getCotizaciones', { asesor: S.asesor.correo });
   hideLoading();
-  if (!res.ok || !res.cotizaciones?.length) { showToast('Sin cotizaciones guardadas'); return; }
-  const lista = res.cotizaciones.map(c =>
-    `<div class="border-b border-fb-light py-2 flex justify-between items-center">
-      <div>
-        <div class="text-xs font-bold">${c.num} — ${c.cliente}</div>
-        <div class="text-[10px] text-fb-silver">${c.fecha} · ${c.total}</div>
-      </div>
-      <button onclick="cotCargar('${c.num}')" class="btn-outline text-xs">Abrir</button>
-    </div>`).join('');
-  // Mostrar en modal reutilizable
-  document.getElementById('modal-historial-cot').querySelector('.cot-hist-body').innerHTML = lista;
+  if (!res.ok) { showToast('Error al cargar historial'); return; }
+  if (!res.cotizaciones?.length) { showToast('Sin cotizaciones guardadas'); return; }
+  _COT_HISTORIAL_DATA  = res.cotizaciones;
+  _COT_FILTRO_ACTIVO   = 'Todas';
+  _renderHistorialCot();
   document.getElementById('modal-historial-cot').style.display = 'flex';
+}
+
+function _renderHistorialCot() {
+  const filtro = _COT_FILTRO_ACTIVO;
+  const datos  = filtro === 'Todas'
+    ? _COT_HISTORIAL_DATA
+    : _COT_HISTORIAL_DATA.filter(c => (c.estado||'Activa') === filtro);
+
+  // ── Pestañas ──
+  const tabs = ['Todas', ...COT_ESTADOS];
+  const tabsHtml = tabs.map(t => {
+    const count = t === 'Todas'
+      ? _COT_HISTORIAL_DATA.length
+      : _COT_HISTORIAL_DATA.filter(c=>(c.estado||'Activa')===t).length;
+    const activa = t === filtro;
+    return `<button onclick="_setCotFiltro('${t}')"
+      style="font-size:10px;padding:4px 10px;border-radius:20px;border:none;cursor:pointer;white-space:nowrap;
+      ${activa ? 'background:#1a2744;color:#fff;font-weight:700' : 'background:#f3f4f6;color:#555'}"
+    >${t} (${count})</button>`;
+  }).join('');
+
+  // ── Tarjetas ──
+  const tarjetas = datos.length === 0
+    ? '<p class="text-xs text-fb-silver text-center py-4">Sin cotizaciones en esta categoría.</p>'
+    : datos.map(c => {
+        const estado  = c.estado || 'Activa';
+        const badge   = COT_ESTADO_BADGE[estado] || 'background:#f3f4f6;color:#555';
+        const tieneTel = !!(c.tel || '').toString().trim();
+        return `<div style="border-bottom:1px solid #e5e7eb;padding:10px 0">
+          <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px">
+            <div style="flex:1;min-width:0">
+              <div style="font-size:10px;font-weight:700;color:#1a2744">${c.num}</div>
+              <div style="font-size:12px;font-weight:600;color:#1a2744;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${c.cliente}</div>
+              <div style="font-size:10px;color:#9ca3af">${c.fecha} · ${c.total}</div>
+            </div>
+            <span style="font-size:10px;font-weight:700;padding:2px 8px;border-radius:20px;flex-shrink:0;${badge}">${estado}</span>
+          </div>
+          <div style="display:flex;gap:6px;margin-top:8px;flex-wrap:wrap">
+            <button onclick="cotCargar('${c.num}')"
+              style="font-size:11px;padding:4px 10px;border-radius:8px;border:1px solid #d1d5db;background:#fff;cursor:pointer;font-weight:600">
+              📂 Abrir
+            </button>
+            <button onclick="_abrirCambioEstadoCot('${c.num}','${estado}')"
+              style="font-size:11px;padding:4px 10px;border-radius:8px;border:1px solid #d1d5db;background:#fff;cursor:pointer;font-weight:600">
+              🔄 Estado
+            </button>
+            <button onclick="_abrirWACot('${c.num}','${c.cliente}','${c.total}',${JSON.stringify(c.tel||'')})"
+              style="font-size:11px;padding:4px 10px;border-radius:8px;border:1px solid #86efac;background:#dcfce7;cursor:pointer;font-weight:600;color:#166534">
+              💬 WhatsApp${tieneTel ? '' : ' ⚠'}
+            </button>
+          </div>
+        </div>`;
+      }).join('');
+
+  document.getElementById('cot-hist-tabs').innerHTML =
+    `<div style="display:flex;gap:6px;flex-wrap:wrap;padding-bottom:10px;border-bottom:1px solid #e5e7eb;margin-bottom:8px">${tabsHtml}</div>`;
+  document.getElementById('cot-hist-body').innerHTML = tarjetas;
+}
+
+function _setCotFiltro(filtro) {
+  _COT_FILTRO_ACTIVO = filtro;
+  _renderHistorialCot();
+}
+
+// ── Cambio de estado inline ──
+function _abrirCambioEstadoCot(num, estadoActual) {
+  const opts = COT_ESTADOS.map(e =>
+    `<option value="${e}" ${e===estadoActual?'selected':''}>${e}</option>`
+  ).join('');
+  const html = `<div style="background:#fff;border-radius:12px;padding:16px;box-shadow:0 4px 24px rgba(0,0,0,.18);max-width:320px;width:90%;position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);z-index:9999">
+    <div style="font-weight:700;font-size:13px;margin-bottom:10px">🔄 Cambiar estado — ${num}</div>
+    <select id="_est-select" style="width:100%;padding:8px;border:1px solid #d1d5db;border-radius:8px;font-size:13px;margin-bottom:12px">${opts}</select>
+    <div style="display:flex;gap:8px">
+      <button onclick="document.getElementById('_est-overlay').remove()"
+        style="flex:1;padding:8px;border-radius:8px;border:1px solid #d1d5db;background:#fff;cursor:pointer;font-size:12px">Cancelar</button>
+      <button onclick="_confirmarCambioEstado('${num}')"
+        style="flex:1;padding:8px;border-radius:8px;border:none;background:#1a2744;color:#fff;cursor:pointer;font-size:12px;font-weight:700">Guardar</button>
+    </div>
+  </div>`;
+  const overlay = document.createElement('div');
+  overlay.id = '_est-overlay';
+  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:9998';
+  overlay.innerHTML = html;
+  overlay.addEventListener('click', e => { if(e.target===overlay) overlay.remove(); });
+  document.body.appendChild(overlay);
+}
+
+async function _confirmarCambioEstado(num) {
+  const estado = document.getElementById('_est-select')?.value;
+  document.getElementById('_est-overlay')?.remove();
+  if (!estado) return;
+  const res = await apiPostWithData({ action:'actualizarEstadoCot', num, estado });
+  if (res?.ok) {
+    const idx = _COT_HISTORIAL_DATA.findIndex(c => c.num === num);
+    if (idx >= 0) _COT_HISTORIAL_DATA[idx].estado = estado;
+    _renderHistorialCot();
+    showToast('Estado actualizado ✅');
+  } else {
+    showToast('Error al actualizar estado', 'error');
+  }
+}
+
+// ── Popup WhatsApp desde historial ──
+function _abrirWACot(num, cliente, total, tel) {
+  const msgDefault = `Hola ${cliente} 👋\n\nTe contactamos de parte de FB Drinkware 🧡 Hace unos días te enviamos una cotización (${num}) por ${total}.\n\n¿Tienes alguna duda o te gustaría proceder con tu pedido? Estamos para ayudarte.`;
+  const html = `<div style="background:#fff;border-radius:12px;padding:16px;box-shadow:0 4px 24px rgba(0,0,0,.18);max-width:380px;width:94%;position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);z-index:9999">
+    <div style="font-weight:700;font-size:13px;margin-bottom:12px">💬 WhatsApp — ${num}</div>
+    ${!tel ? `<div style="margin-bottom:8px">
+      <label style="font-size:11px;font-weight:600;color:#6b7280;display:block;margin-bottom:4px">TELÉFONO (requerido)</label>
+      <input id="_wa-tel" type="tel" placeholder="10 dígitos sin código de país"
+        style="width:100%;padding:8px;border:1px solid #d1d5db;border-radius:8px;font-size:13px;box-sizing:border-box">
+    </div>` : `<input id="_wa-tel" type="hidden" value="${tel}">`}
+    <div style="margin-bottom:12px">
+      <label style="font-size:11px;font-weight:600;color:#6b7280;display:block;margin-bottom:4px">MENSAJE</label>
+      <textarea id="_wa-msg" rows="5"
+        style="width:100%;padding:8px;border:1px solid #d1d5db;border-radius:8px;font-size:12px;resize:vertical;box-sizing:border-box">${msgDefault}</textarea>
+    </div>
+    <div style="display:flex;gap:8px">
+      <button onclick="document.getElementById('_wa-overlay').remove()"
+        style="flex:1;padding:8px;border-radius:8px;border:1px solid #d1d5db;background:#fff;cursor:pointer;font-size:12px">Cancelar</button>
+      <button onclick="_enviarWACot('${num}')"
+        style="flex:1;padding:8px;border-radius:8px;border:none;background:#16a34a;color:#fff;cursor:pointer;font-size:12px;font-weight:700">Abrir WhatsApp</button>
+    </div>
+  </div>`;
+  const overlay = document.createElement('div');
+  overlay.id = '_wa-overlay';
+  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:9998';
+  overlay.innerHTML = html;
+  overlay.addEventListener('click', e => { if(e.target===overlay) overlay.remove(); });
+  document.body.appendChild(overlay);
+}
+
+async function _enviarWACot(num) {
+  const telRaw = (document.getElementById('_wa-tel')?.value || '').replace(/\D/g,'');
+  const msg    = document.getElementById('_wa-msg')?.value || '';
+  if (!telRaw || telRaw.length < 10) { showToast('Escribe un teléfono válido (10 dígitos)', 'warn'); return; }
+  document.getElementById('_wa-overlay')?.remove();
+  // Guardar teléfono en la cotización si no existía
+  const idx = _COT_HISTORIAL_DATA.findIndex(c => c.num === num);
+  if (idx >= 0 && !_COT_HISTORIAL_DATA[idx].tel) {
+    _COT_HISTORIAL_DATA[idx].tel = telRaw;
+    apiPostWithData({ action:'actualizarEstadoCot', num, tel:telRaw });
+  }
+  const tel52 = telRaw.length === 10 ? '52' + telRaw : telRaw;
+  window.open(`https://wa.me/${tel52}?text=${encodeURIComponent(msg)}`, '_blank');
 }
 
 async function cotCargar(num) {
@@ -1771,9 +1922,10 @@ async function cargarConfig() {
   ]);
   if (resConfig.ok) {
     const c = resConfig.config;
-    if (c.CORREOS_ALTA) CORREOS.alta = c.CORREOS_ALTA;
-    if (c.CORREOS_FAC)  CORREOS.fac  = c.CORREOS_FAC;
-    if (c.CORREOS_PROD) CORREOS.prod  = c.CORREOS_PROD;
+    if (c.CORREOS_ALTA)   CORREOS.alta = c.CORREOS_ALTA;
+    if (c.CORREOS_FAC)    CORREOS.fac  = c.CORREOS_FAC;
+    if (c.CORREOS_PROD)   CORREOS.prod = c.CORREOS_PROD;
+    if (c.CORREOS_DISENO) CORREOS.dis  = c.CORREOS_DISENO;
     if (c.DATOS_BANCO)  DATOS_BANCO   = c.DATOS_BANCO;
     if (c.WHATSAPP_NUM) WHATSAPP_NUM  = c.WHATSAPP_NUM;
   }
@@ -3125,7 +3277,9 @@ Saludos,
 ${S.asesor.nombre}`;
 
   const TO  = 'nelly.gonzalez@francobolli.com.mx';
-  const CC  = 'ppalacios@francobolli.com.mx,penelope.martinez@francobolli.com.mx,ricky.moo@grupoavanti.com';
+  const CC  = CORREOS.dis
+    ? CORREOS.dis.split(',').filter(c => c.trim() !== 'nelly.gonzalez@francobolli.com.mx').join(',')
+    : 'ricky.moo@grupoavanti.com';
   window.open(
     `https://mail.google.com/mail/?view=cm&to=${enc(TO)}&cc=${enc(CC)}&su=${enc(asunto)}&body=${enc(body)}`,
     '_blank'
@@ -3200,10 +3354,47 @@ function confirmarEnvioProduccion() {
       })()
     : '';
 
+  // ── Detectar si es liso (sin grabado ni nombres individuales) ──
+  const esLiso = (p.grabado !== 'Sí') &&
+    (p.nombresPorVaso !== 'Sí') && (p.nombresIndividuales !== 'Sí');
+
+  // ── Texto de introducción según tipo ──
+  const introTexto = esLiso
+    ? 'Solicito el surtido de esta venta, son vasos lisos.'
+    : 'Solicito ingreso a cola de producción.';
+
+  // ── Sección DISEÑO según tipo ──
+  const seccionDiseno = esLiso
+    ? `${'─'.repeat(30)}
+DISEÑO
+${'─'.repeat(30)}
+Grabado: No · Nombres individuales: No`
+    : `${'─'.repeat(30)}
+DISEÑO
+${'─'.repeat(30)}
+Grabado: ${p.grabado||'No'} · Nombres individuales: ${p.nombresIndividuales||p.nombresPorVaso||'No'}
+Diseño aprobado: ${S.pasos['diseno-aprobado']?.ok?'Sí':'Pendiente'}
+Carpeta OneDrive: ${od}
+Link CSF en Drive: ${p.urlCSF||'No disponible'}
+PDF de muestra: ${p.urlPdfDiseno||'(Adjuntar manualmente en Gmail)'}
+${!p.urlPdfDiseno?'⚠ Recuerda adjuntar el PDF de muestra manualmente antes de enviar.':''}`;
+
+  // ── Destinatarios: liso = CORREOS.prod sin 3 correos; con diseño = misma lista ──
+  const CORREOS_EXCLUIR_LISO = [
+    'elisa.rejon@francobolli.com.mx',
+    'manuel.nunez@francobolli.com.mx',
+    'storres@francobolli.com.mx',
+  ];
+  const destinatariosProd = esLiso
+    ? (CORREOS.prod||'').split(',')
+        .map(c => c.trim()).filter(c => c && !CORREOS_EXCLUIR_LISO.includes(c.toLowerCase()))
+        .join(',')
+    : (CORREOS.prod||'');
+
   const body =
 `Buenos días equipo,
 
-Solicito ingreso a cola de producción.
+${introTexto}
 
 ${'─'.repeat(30)}
 IDENTIFICACIÓN
@@ -3227,15 +3418,7 @@ SKU       | CANT  | DESCRIPCIÓN
 ----------+-------+------------------
 ${prods}
 
-${'─'.repeat(30)}
-DISEÑO
-${'─'.repeat(30)}
-Grabado: ${p.grabado||'No'} · Nombres individuales: ${p.nombresIndividuales||p.nombresPorVaso||'No'}
-Diseño aprobado: ${S.pasos['diseno-aprobado']?.ok?'Sí':'Pendiente'}
-Carpeta OneDrive: ${od}
-Link CSF en Drive: ${p.urlCSF||'No disponible'}
-PDF de muestra: ${p.urlPdfDiseno||'(Adjuntar manualmente en Gmail)'}
-${!p.urlPdfDiseno?'⚠ Recuerda adjuntar el PDF de muestra manualmente antes de enviar.':''}
+${seccionDiseno}
 
 ${'─'.repeat(30)}
 ENTREGA
@@ -3256,7 +3439,7 @@ Asesor: ${S.asesor.nombre} (${S.asesor.codigo})
 Saludos,`;
 
   cerrarModal('modal-produccion');
-  window.open(`https://mail.google.com/mail/?view=cm&to=${enc(CORREOS.prod)}&su=${enc(asunto)}&body=${enc(body)}`,'_blank');
+  window.open(`https://mail.google.com/mail/?view=cm&to=${enc(destinatariosProd)}&su=${enc(asunto)}&body=${enc(body)}`,'_blank');
   if (od !== '(pendiente)') apiPost({ action:'guardarOneDrive', fbk:p.id, valor:od, quien:S.asesor.nombre });
   apiPost({ action:'cambiarEstado', fbk:p.id, estado:'En producción', quien:S.asesor.nombre });
   S.pedido.estado = 'En producción';
@@ -4973,9 +5156,10 @@ function copiarTablaOV() {
 </script>
 <!-- ══ MODAL HISTORIAL COTIZACIONES ══ -->
 <div class="modal-overlay" id="modal-historial-cot" style="display:none">
-  <div class="modal-box" style="max-width:480px;width:96%">
+  <div class="modal-box" style="max-width:520px;width:96%">
     <h3 class="font-black text-fb-dark text-base mb-3">📂 Mis cotizaciones</h3>
-    <div class="cot-hist-body max-h-64 overflow-y-auto mb-4"></div>
+    <div id="cot-hist-tabs"></div>
+    <div id="cot-hist-body" class="max-h-72 overflow-y-auto mb-4"></div>
     <button onclick="cerrarModal('modal-historial-cot')" class="btn-outline w-full text-xs">Cerrar</button>
   </div>
 </div>
