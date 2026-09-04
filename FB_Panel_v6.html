@@ -1406,7 +1406,12 @@ function _renderHistorialCot() {
               style="font-size:11px;padding:4px 10px;border-radius:8px;border:1px solid #d1d5db;background:#fff;cursor:pointer;font-weight:600">
               🔄 Estado
             </button>
-            <button onclick="_abrirWACot('${c.num}','${c.cliente}','${c.total}',${JSON.stringify(c.tel||'')})"
+            <button
+              data-wa-num="${c.num}"
+              data-wa-cliente="${(c.cliente||'').replace(/"/g,'&quot;')}"
+              data-wa-total="${(c.total||'').replace(/"/g,'&quot;')}"
+              data-wa-tel="${(c.tel||'').toString().replace(/"/g,'&quot;')}"
+              onclick="_abrirWACotBtn(this)"
               style="font-size:11px;padding:4px 10px;border-radius:8px;border:1px solid #86efac;background:#dcfce7;cursor:pointer;font-weight:600;color:#166534">
               💬 WhatsApp${tieneTel ? '' : ' ⚠'}
             </button>
@@ -1463,6 +1468,16 @@ async function _confirmarCambioEstado(num) {
 }
 
 // ── Popup WhatsApp desde historial ──
+// Puente seguro: lee data-attributes del botón y llama a _abrirWACot
+// Evita rotura por comillas/caracteres especiales en nombres de clientes
+function _abrirWACotBtn(btn) {
+  const num     = btn.dataset.waNum    || '';
+  const cliente = btn.dataset.waCliente|| '';
+  const total   = btn.dataset.waTotal  || '';
+  const tel     = btn.dataset.waTel    || '';
+  _abrirWACot(num, cliente, total, tel);
+}
+
 function _abrirWACot(num, cliente, total, tel) {
   const msgDefault = `Hola ${cliente} 👋\n\nTe contactamos de parte de FB Drinkware 🧡 Hace unos días te enviamos una cotización (${num}) por ${total}.\n\n¿Tienes alguna duda o te gustaría proceder con tu pedido? Estamos para ayudarte.`;
   const html = `<div style="background:#fff;border-radius:12px;padding:16px;box-shadow:0 4px 24px rgba(0,0,0,.18);max-width:380px;width:94%;position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);z-index:9999">
