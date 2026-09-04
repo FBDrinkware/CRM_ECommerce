@@ -1375,7 +1375,7 @@ function _renderHistorialCot() {
       ? _COT_HISTORIAL_DATA.length
       : _COT_HISTORIAL_DATA.filter(c=>(c.estado||'Activa')===t).length;
     const activa = t === filtro;
-    return `<button onclick="_setCotFiltro('${t}')"
+    return `<button data-filtro="${t.replace(/"/g,'&quot;')}" onclick="_setCotFiltroBtn(this)"
       style="font-size:10px;padding:4px 10px;border-radius:20px;border:none;cursor:pointer;white-space:nowrap;
       ${activa ? 'background:#1a2744;color:#fff;font-weight:700' : 'background:#f3f4f6;color:#555'}"
     >${t} (${count})</button>`;
@@ -1402,7 +1402,10 @@ function _renderHistorialCot() {
               style="font-size:11px;padding:4px 10px;border-radius:8px;border:1px solid #d1d5db;background:#fff;cursor:pointer;font-weight:600">
               📂 Abrir
             </button>
-            <button onclick="_abrirCambioEstadoCot('${c.num}','${estado}')"
+            <button
+              data-cot-num="${c.num}"
+              data-cot-estado="${estado.replace(/"/g,'&quot;')}"
+              onclick="_abrirCambioEstadoCotBtn(this)"
               style="font-size:11px;padding:4px 10px;border-radius:8px;border:1px solid #d1d5db;background:#fff;cursor:pointer;font-weight:600">
               🔄 Estado
             </button>
@@ -1424,9 +1427,17 @@ function _renderHistorialCot() {
   document.getElementById('cot-hist-body').innerHTML = tarjetas;
 }
 
+function _setCotFiltroBtn(btn) {
+  _setCotFiltro(btn.dataset.filtro || 'Todas');
+}
+
 function _setCotFiltro(filtro) {
   _COT_FILTRO_ACTIVO = filtro;
   _renderHistorialCot();
+}
+
+function _abrirCambioEstadoCotBtn(btn) {
+  _abrirCambioEstadoCot(btn.dataset.cotNum || '', btn.dataset.cotEstado || 'Activa');
 }
 
 // ── Cambio de estado inline ──
