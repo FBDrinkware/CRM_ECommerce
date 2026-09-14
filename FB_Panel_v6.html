@@ -5155,7 +5155,7 @@ function copiarTablaEPICOR() {
     const unitConIVA = Number(pr.precioUnit || pr.precio || 0);
     const unitSinIVA = (unitConIVA / 1.16).toFixed(2);
     // TSV: A=vacío  B=vacío  C=SKU  D=cant  E=vacío  F=desc  G=vacío  H=precio s/IVA
-    return `\t\t${skuProd}\t${cant}\t\t${descProd}\t\t${unitSinIVA}`;
+    return `${skuProd}\t${cant}\t${unitSinIVA}`;
   });
   navigator.clipboard.writeText(rows.join('\n'));
   showToast('Tabla EPICOR copiada — pega directamente en la OV ✅');
