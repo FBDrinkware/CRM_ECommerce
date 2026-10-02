@@ -849,17 +849,11 @@
             <option value="TODOS">Todos</option>
           </select>
         </div>
-        <div class="campo flex-1" style="min-width:130px">
-          <label>Estado</label>
-          <select id="rep-estado" class="w-full border border-fb-light rounded-xl px-3 py-2 text-sm">
-            <option value="TODOS">Todos</option>
-            <option>Cotización</option>
-            <option>Venta</option>
-            <option>En producción</option>
-            <option>Enviado</option>
-            <option>Entregado</option>
-            <option>Cancelado</option>
-          </select>
+        <div class="campo flex-1" style="min-width:160px">
+          <label>Estado (múltiple)</label>
+          <div id="rep-estados-wrap" style="display:flex;flex-wrap:wrap;gap:5px;margin-top:4px">
+            <!-- generado por JS -->
+          </div>
         </div>
       </div>
       <!-- Accesos rápidos de mes -->
@@ -1152,7 +1146,8 @@ function mostrarApp() {
   }
   document.getElementById('f-asesor-cod').value = S.asesor.codigo;
   document.getElementById('f-asesor-nom').value = S.asesor.nombre;
-  // Inicializar selector de asesores en reporte si es Admin
+  // Inicializar reportes
+  _initReporteEstados();
   setTimeout(_initReporteAdmin, 1500);
 }
 
@@ -2325,11 +2320,16 @@ function repFiltroMes(offset) {
 async function ejecutarReporte() {
   const desde  = document.getElementById('rep-desde').value;
   const hasta  = document.getElementById('rep-hasta').value;
-  const estado = document.getElementById('rep-estado').value;
+  // Leer estados seleccionados (múltiple)
+  const estadosSel = Array.from(
+    document.querySelectorAll('#rep-estados-wrap input[type=checkbox]:checked')
+  ).map(cb => cb.value);
+  const estado = estadosSel.length > 0 ? estadosSel.join(',') : 'TODOS';
   const esAdmin= S.asesor?.jerarquia === 'Admin';
+  // Asesor: Admin filtra por nombre (col AJ), no-Admin fija su propio nombre
   const asesor = esAdmin
     ? (document.getElementById('rep-asesor')?.value || 'TODOS')
-    : S.asesor.codigo;
+    : S.asesor.nombre;
 
   if (!desde || !hasta) { showToast('Selecciona el rango de fechas'); return; }
 
@@ -2432,6 +2432,53 @@ function repExportarCSV() {
   showToast('Reporte exportado ✅');
 }
 
+// Inicializar checkboxes de estado en reportes
+function _initReporteEstados() {
+  const estados = ['Cotización','Venta','En producción','Enviado','Entregado','Cancelado'];
+  const wrap = document.getElementById('rep-estados-wrap');
+  if (!wrap || wrap.children.length > 0) return;
+  // Botón "Todos" como primer chip
+  const btnTodos = document.createElement('button');
+  btnTodos.textContent = 'Todos';
+  btnTodos.id = 'rep-est-todos';
+  btnTodos.style.cssText = 'font-size:10px;padding:3px 10px;border-radius:20px;border:none;cursor:pointer;font-weight:700;background:#184273;color:#fff';
+  btnTodos.onclick = () => _repToggleTodos();
+  wrap.appendChild(btnTodos);
+  estados.forEach(e => {
+    const lbl = document.createElement('label');
+    lbl.style.cssText = 'display:inline-flex;align-items:center;gap:4px;font-size:10px;padding:3px 10px;border-radius:20px;border:1px solid #e2e8f0;cursor:pointer;background:#f8f9fb;font-weight:600;color:#555';
+    const cb = document.createElement('input');
+    cb.type = 'checkbox'; cb.value = e; cb.style.display = 'none';
+    cb.onchange = () => _repActualizarEstadoChips();
+    lbl.appendChild(cb);
+    lbl.appendChild(document.createTextNode(e));
+    wrap.appendChild(lbl);
+  });
+}
+function _repToggleTodos() {
+  // Si "Todos" está activo, desmarcar todos los checkboxes
+  const cbs = document.querySelectorAll('#rep-estados-wrap input[type=checkbox]');
+  cbs.forEach(cb => { cb.checked = false; });
+  _repActualizarEstadoChips();
+}
+function _repActualizarEstadoChips() {
+  const wrap   = document.getElementById('rep-estados-wrap');
+  const labels = wrap.querySelectorAll('label');
+  const cbs    = wrap.querySelectorAll('input[type=checkbox]');
+  const alguno = Array.from(cbs).some(cb => cb.checked);
+  // Estilo botón "Todos"
+  const btnTodos = document.getElementById('rep-est-todos');
+  btnTodos.style.background = alguno ? '#f3f4f6' : '#184273';
+  btnTodos.style.color      = alguno ? '#555'    : '#fff';
+  // Estilo cada chip
+  labels.forEach(lbl => {
+    const cb = lbl.querySelector('input');
+    lbl.style.background  = cb.checked ? '#184273' : '#f8f9fb';
+    lbl.style.color       = cb.checked ? '#fff'    : '#555';
+    lbl.style.borderColor = cb.checked ? '#184273' : '#e2e8f0';
+  });
+}
+
 // Inicializar selector de asesor en reportes
 async function _initReporteAdmin() {
   const campoAsesor = document.getElementById('rep-campo-asesor');
@@ -2449,7 +2496,7 @@ async function _initReporteAdmin() {
     if (sel.options.length > 1) return;
     LISTA_ASESORES.forEach(a => {
       const opt = document.createElement('option');
-      opt.value = a.codigo;
+      opt.value = a.nombre; // filtrar por nombre = col AJ
       opt.textContent = a.nombre + ' (' + a.codigo + ')';
       sel.appendChild(opt);
     });
