@@ -167,6 +167,7 @@
     <button class="tab-btn" onclick="showTab('tab-seguimiento',this)" id="tab-btn-seg">⚡ Seguimiento</button>
     <button class="tab-btn" id="tab-btn-admin" onclick="showTab('tab-admin',this)" style="display:none">👑 Admin</button>
     <button class="tab-btn" onclick="showTab('tab-cotizador',this)" id="tab-btn-cotizador">💰 Cotizador</button>
+    <button class="tab-btn" id="tab-btn-reportes" onclick="showTab('tab-reportes',this)" style="display:none">📊 Reportes</button>
   </div>
 </header>
 
@@ -805,8 +806,81 @@
       </button>
     </div>
     <div id="cot-status" class="text-xs text-fb-silver mt-2 text-center"></div>
+    <!-- Botón datos de pago en cotizador -->
+    <div class="mt-2">
+      <button onclick="abrirDatosPagoCot()"
+        class="w-full text-left text-sm font-bold text-[#92400e] bg-[#fffbeb] hover:bg-[#fef3c7] border border-[#fcd34d] rounded-xl px-4 py-3 transition-all">
+        🏦 Ver datos de pago
+      </button>
+    </div>
   </div>
 
+</div>
+
+<!-- ══ TAB REPORTES ══ -->
+<div class="screen" id="tab-reportes" style="display:none">
+  <div class="card">
+    <div class="seccion">📊 Reporte de ventas</div>
+    <!-- Filtros -->
+    <div class="space-y-3 mb-4">
+      <div class="flex gap-2 flex-wrap">
+        <div class="campo flex-1" style="min-width:130px">
+          <label>Desde</label>
+          <input type="date" id="rep-desde" class="w-full">
+        </div>
+        <div class="campo flex-1" style="min-width:130px">
+          <label>Hasta</label>
+          <input type="date" id="rep-hasta" class="w-full">
+        </div>
+        <div class="campo flex-1" style="min-width:130px" id="rep-campo-asesor" style="display:none">
+          <label>Asesor</label>
+          <select id="rep-asesor" class="w-full border border-fb-light rounded-xl px-3 py-2 text-sm">
+            <option value="TODOS">Todos</option>
+          </select>
+        </div>
+        <div class="campo flex-1" style="min-width:130px">
+          <label>Estado</label>
+          <select id="rep-estado" class="w-full border border-fb-light rounded-xl px-3 py-2 text-sm">
+            <option value="TODOS">Todos</option>
+            <option>Cotización</option>
+            <option>Venta</option>
+            <option>En producción</option>
+            <option>Enviado</option>
+            <option>Entregado</option>
+            <option>Cancelado</option>
+          </select>
+        </div>
+      </div>
+      <!-- Accesos rápidos de mes -->
+      <div class="flex gap-2 flex-wrap">
+        <button onclick="repFiltroMes(0)" class="btn-outline text-xs">Este mes</button>
+        <button onclick="repFiltroMes(-1)" class="btn-outline text-xs">Mes anterior</button>
+        <button onclick="repFiltroMes(-2)" class="btn-outline text-xs">Hace 2 meses</button>
+        <button onclick="repFiltroMes(-3)" class="btn-outline text-xs">Últimos 3 meses</button>
+      </div>
+      <button onclick="ejecutarReporte()" class="btn-primary w-full">🔍 Generar reporte</button>
+    </div>
+    <!-- Resumen KPIs -->
+    <div id="rep-kpis" class="grid grid-cols-3 gap-2 mb-4" style="display:none">
+      <div class="bg-[#f0f4ff] rounded-xl p-3 text-center">
+        <div class="text-[10px] text-fb-silver">Pedidos</div>
+        <div class="font-black text-fb-dark text-lg" id="rep-kpi-pedidos">0</div>
+      </div>
+      <div class="bg-[#f0f4ff] rounded-xl p-3 text-center">
+        <div class="text-[10px] text-fb-silver">Piezas</div>
+        <div class="font-black text-fb-dark text-lg" id="rep-kpi-piezas">0</div>
+      </div>
+      <div class="bg-[#f0fdf4] rounded-xl p-3 text-center">
+        <div class="text-[10px] text-fb-silver">Monto total</div>
+        <div class="font-black text-green-700 text-base" id="rep-kpi-monto">$0</div>
+      </div>
+    </div>
+    <!-- Tabla agrupada -->
+    <div id="rep-tabla"></div>
+    <div id="rep-export" style="display:none" class="mt-3">
+      <button onclick="repExportarCSV()" class="btn-outline text-xs w-full">📥 Exportar CSV</button>
+    </div>
+  </div>
 </div>
 
 </div><!-- /max-w -->
@@ -1050,6 +1124,7 @@ function mostrarApp() {
   document.getElementById('app-principal').style.display = 'block';
   document.getElementById('hdr-asesor').textContent = S.asesor.codigo + ' · ' + S.asesor.nombre.split(' ')[0];
   document.getElementById('hdr-jerarquia').textContent = S.asesor.jerarquia;
+  document.getElementById('tab-btn-reportes').style.display = 'block'; // visible para todos
   if (S.asesor.jerarquia === 'Admin') {
     document.getElementById('tab-btn-admin').style.display = 'block';
     document.getElementById('card-nuevo-manual').style.display = 'block';
@@ -1066,6 +1141,8 @@ function mostrarApp() {
   }
   document.getElementById('f-asesor-cod').value = S.asesor.codigo;
   document.getElementById('f-asesor-nom').value = S.asesor.nombre;
+  // Inicializar selector de asesores en reporte si es Admin
+  setTimeout(_initReporteAdmin, 1500);
 }
 
 function cerrarSesion() {
@@ -1311,29 +1388,72 @@ async function cotConvertirPedido() {
   const cliente = document.getElementById('cot-cliente').value.trim();
   if (!cliente) { showToast('Ingresa el nombre del cliente'); return; }
   if (COT.lineas.length===0) { showToast('Agrega al menos un producto'); return; }
-  if (!confirm(`¿Convertir esta cotización en pedido para ${cliente}? Se creará un nuevo FBK en el panel.`)) return;
+
+  // ── Verificar si hay descuentos aplicados ──
+  const descGlobal = Number(document.getElementById('cot-desc-global')?.value)||0;
+  const tieneDescLinea = COT.lineas.some(l => (l.descLinea||0) > 0);
+  const tieneDescuento = descGlobal > 0 || tieneDescLinea;
+
+  let codigoAutorizado = '';
+  if (tieneDescuento) {
+    // Pedir código de autorización igual que en el panel
+    const codigo = prompt(
+      'Esta cotización tiene descuentos aplicados.\n\nIngresa el código de autorización de descuento para continuar:'
+    );
+    if (!codigo) return;
+    showLoading('Validando código...');
+    const valRes = await apiPostWithData({ action:'validarCodigoDescuento', codigo });
+    hideLoading();
+    if (!valRes?.ok) {
+      showToast('Código inválido o expirado: ' + (valRes?.error||''), 'error');
+      return;
+    }
+    codigoAutorizado = codigo.toUpperCase();
+  }
+
+  if (!confirm('¿Convertir esta cotización en pedido para ' + cliente + '? Se creará un nuevo FBK en el panel.')) return;
+
+  // ── Recopilar gastos de envío y otros cargos ──
+  const toggleOn = document.getElementById('toggle-envio')?.classList.contains('on');
+  const gastoEnvio = toggleOn ? (Number(document.getElementById('cot-envio-monto')?.value)||0) : 0;
+  const otrosCargos = [];
+  document.querySelectorAll('#cot-otros .cot-extra-row').forEach(row => {
+    const idx  = row.id.replace('otro-cargo-','');
+    const desc = document.getElementById('otro-desc-'+idx)?.value?.trim() || 'Otro cargo';
+    const monto= Number(document.getElementById('otro-monto-'+idx)?.value)||0;
+    if (monto > 0) otrosCargos.push({ desc, monto });
+  });
+
   document.getElementById('cot-status').textContent = 'Creando pedido...';
   showLoading('Creando pedido...');
   const res = await apiPostWithData({
-    action:   'cotizacionAPedido',
-    asesor:   S.asesor.codigo,
-    asesorNombre: S.asesor.nombre,
-    nombre:   cliente,
-    correo:   document.getElementById('cot-correo').value,
-    telefono: document.getElementById('cot-tel').value,
-    productos: COT.lineas.map(l=>({
-      sku: l.sku, descripcion: l.desc,
-      cantidad: l.cant, precioUnit: l.precioEdit,
+    action:      'cotizacionAPedido',
+    asesor:      S.asesor.codigo,
+    asesorNombre:S.asesor.nombre,
+    nombre:      cliente,
+    correo:      document.getElementById('cot-correo').value,
+    telefono:    document.getElementById('cot-tel').value,
+    descGlobal,
+    codigoDescuento: codigoAutorizado,
+    productos: COT.lineas.map(l => ({
+      sku:        l.sku,
+      descripcion:l.desc,
+      cantidad:   l.cant,
+      precioUnit: l.precioEdit,
       precioBase: l.precioBase,
+      descLinea:  l.descLinea || 0,
     })),
-    numCot: COT.num || '',  // para marcar automáticamente como Convertida en Sheets
+    gastoEnvio,
+    otrosCargos,
+    numCot: COT.num || '',
   });
   hideLoading();
-  if (res.ok) {
+  if (res?.ok) {
     document.getElementById('cot-status').textContent = '✅ Pedido creado: ' + (res.fbk||'');
     showToast('Pedido creado: ' + (res.fbk||''));
   } else {
     document.getElementById('cot-status').textContent = '❌ Error al crear pedido';
+    showToast('Error: ' + (res?.error||'sin respuesta'), 'error');
   }
 }
 
@@ -1509,8 +1629,7 @@ function _abrirWACotBtn(btn) {
 }
 
 function _abrirWACot(num, cliente, total, tel) {
-  const totalFmt = total.startsWith('$') ? total : '$' + Number(total.replace(/[^0-9.]/g,'')).toLocaleString('es-MX',{minimumFractionDigits:2});
-  const msgDefault = `Hola ${cliente} 👋\n\nTe contactamos de parte de FB Drinkware 🧡 Hace unos días te enviamos una cotización (${num}) por ${totalFmt} MXN.\n\n¿Tienes alguna duda o te gustaría proceder con tu pedido? Estamos para ayudarte.`;
+  const msgDefault = `Hola ${cliente} 👋\n\nTe contactamos de parte de FB Drinkware 🧡 Hace unos días te enviamos una cotización (${num}) por ${total}.\n\n¿Tienes alguna duda o te gustaría proceder con tu pedido? Estamos para ayudarte.`;
   const html = `<div style="background:#fff;border-radius:12px;padding:16px;box-shadow:0 4px 24px rgba(0,0,0,.18);max-width:380px;width:94%;position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);z-index:9999">
     <div style="font-weight:700;font-size:13px;margin-bottom:12px">💬 WhatsApp — ${num}</div>
     ${!tel ? `<div style="margin-bottom:8px">
@@ -1952,6 +2071,353 @@ function generarCotPedidoPDF() {
   win.document.write(htmlPDF);
   win.document.close();
   win.onload = () => { win.focus(); win.print(); };
+}
+
+// ── DATOS DE PAGO EN COTIZADOR ───────────────────────────────
+function abrirDatosPagoCot() {
+  document.getElementById('datos-banco-cot').textContent = DATOS_BANCO;
+  _cotPagoTab('transferencia');
+  document.getElementById('modal-datos-pago-cot').style.display = 'flex';
+}
+function _cotPagoTab(tab) {
+  const esTransf = tab === 'transferencia';
+  document.getElementById('pago-cot-transf').style.display = esTransf ? 'block' : 'none';
+  document.getElementById('pago-cot-clip').style.display   = esTransf ? 'none' : 'block';
+  document.getElementById('btn-tab-transf').style.cssText  = esTransf
+    ? 'flex:1;padding:8px;border-radius:12px;font-size:11px;font-weight:700;border:2px solid #184273;background:#184273;color:#fff;cursor:pointer'
+    : 'flex:1;padding:8px;border-radius:12px;font-size:11px;font-weight:700;border:2px solid #e2e8f0;background:#fff;color:#9ca3af;cursor:pointer';
+  document.getElementById('btn-tab-clip').style.cssText = esTransf
+    ? 'flex:1;padding:8px;border-radius:12px;font-size:11px;font-weight:700;border:2px solid #e2e8f0;background:#fff;color:#9ca3af;cursor:pointer'
+    : 'flex:1;padding:8px;border-radius:12px;font-size:11px;font-weight:700;border:2px solid #184273;background:#184273;color:#fff;cursor:pointer';
+}
+function _copiarDatosBancoCot() {
+  navigator.clipboard.writeText(DATOS_BANCO);
+  showToast('Datos de transferencia copiados ✅');
+}
+
+// ── RECIBO DE PAGO ────────────────────────────────────────────
+function abrirModalRecibo() {
+  const p = S.pedido;
+  if (!p) return;
+  const hoy = new Date().toISOString().split('T')[0];
+  const nombreCliente = p.razonSocial || p.empresa || p.nombreComercial || p.nombreContacto || '';
+  const domFiscal = [p.domFiscal, p.ciudadFiscal, p.estadoFiscal, p.cpFiscal].filter(Boolean).join(', ');
+  const esAnticipo = !!(p.pasos?.['pago']?.ok) && p.refPago; // si hay referencia previa, puede ser liquidación
+  const totalPedido = S.pedido.productos
+    ? S.pedido.productos.reduce((s,pr)=>s+Number(pr.total||0),0) : 0;
+
+  document.getElementById('rec-fecha').value     = hoy;
+  document.getElementById('rec-ov').value        = p.ovEpicor || '';
+  document.getElementById('rec-fbk').value       = p.id || '';
+  document.getElementById('rec-nombre').value    = nombreCliente;
+  document.getElementById('rec-ref').value       = p.refPago || '';
+  document.getElementById('rec-domicilio').value = domFiscal;
+  document.getElementById('rec-total').value     = totalPedido.toFixed(2);
+  document.getElementById('rec-abono').value     = '';
+  document.getElementById('rec-concepto').value  = p.ovEpicor
+    ? 'Anticipo de pedido ' + p.ovEpicor
+    : 'Pago de pedido ' + p.id;
+  document.getElementById('rec-obs').value       = '';
+  document.getElementById('rec-es-anticipo').checked = false;
+  document.getElementById('rec-bloque-anticipo').style.display = 'none';
+  document.getElementById('rec-liquidar-preview').textContent  = '$0.00';
+  document.getElementById('modal-recibo-pago').style.display   = 'flex';
+}
+
+function _recToggleAnticipo(el) {
+  document.getElementById('rec-bloque-anticipo').style.display = el.checked ? 'block' : 'none';
+  _recRecalcular();
+  // Actualizar concepto automáticamente
+  const ov  = document.getElementById('rec-ov').value.trim();
+  const fbk = document.getElementById('rec-fbk').value.trim();
+  const ref = ov || fbk;
+  document.getElementById('rec-concepto').value = el.checked
+    ? 'Anticipo de pedido ' + ref
+    : 'Pago de pedido ' + ref;
+}
+
+function _recRecalcular() {
+  const total = Number(document.getElementById('rec-total')?.value)||0;
+  const abono = Number(document.getElementById('rec-abono')?.value)||0;
+  const liquidar = Math.max(0, total - abono);
+  const fmt = n => '$' + n.toLocaleString('es-MX', {minimumFractionDigits:2});
+  document.getElementById('rec-liquidar-preview').textContent = fmt(liquidar);
+  const obs = document.getElementById('rec-obs');
+  if (abono > 0 && liquidar > 0 && obs) {
+    obs.value = 'Pago realizado según acuerdo previo, quedando pendiente a liquidar ' + fmt(liquidar);
+  }
+}
+
+function generarReciboPDF() {
+  const fecha    = document.getElementById('rec-fecha').value;
+  const ov       = document.getElementById('rec-ov').value.trim();
+  const fbk      = document.getElementById('rec-fbk').value.trim();
+  const nombre   = document.getElementById('rec-nombre').value.trim();
+  const ref      = document.getElementById('rec-ref').value.trim();
+  const domicilio= document.getElementById('rec-domicilio').value.trim();
+  const total    = Number(document.getElementById('rec-total').value)||0;
+  const esAnticipo = document.getElementById('rec-es-anticipo').checked;
+  const abono    = esAnticipo ? (Number(document.getElementById('rec-abono').value)||0) : total;
+  const liquidar = Math.max(0, total - abono);
+  const concepto = document.getElementById('rec-concepto').value.trim();
+  const obs      = document.getElementById('rec-obs').value.trim();
+  const vendedor = S.asesor.nombre;
+
+  const fmtNum = n => '$' + n.toLocaleString('es-MX',{minimumFractionDigits:2});
+  const fmtFecha = d => {
+    if (!d) return '—';
+    const [y,m,dd] = d.split('-');
+    const meses = ['enero','febrero','marzo','abril','mayo','junio',
+      'julio','agosto','septiembre','octubre','noviembre','diciembre'];
+    return dd + ' de ' + meses[parseInt(m)-1] + ' de ' + y;
+  };
+
+  const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><style>
+    *{box-sizing:border-box;margin:0;padding:0}
+    body{font-family:Arial,sans-serif;font-size:12px;color:#1a2744;padding:32px;max-width:750px;margin:auto}
+    .header{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:24px}
+    .title{font-size:32px;font-weight:900;letter-spacing:-1px}
+    .title span{color:#9ca3af}
+    .sub{font-size:11px;color:#9ca3af;text-transform:uppercase;letter-spacing:2px;margin-top:4px}
+    .logo{font-size:24px;font-weight:900;color:#1a2744;text-align:right}
+    .meta{display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-bottom:28px;padding-bottom:16px;border-bottom:1px solid #e5e7eb}
+    .meta-item label{font-size:10px;font-weight:700;text-transform:uppercase;color:#9ca3af;display:block;margin-bottom:4px}
+    .meta-item .val{font-size:13px;font-weight:600;border-bottom:1px solid #1a2744;padding-bottom:2px}
+    .field{display:flex;align-items:baseline;gap:8px;margin-bottom:14px;padding-bottom:10px;border-bottom:1px solid #e5e7eb}
+    .field label{font-size:11px;font-weight:700;min-width:140px;flex-shrink:0}
+    .field .val{font-size:12px;flex:1}
+    .obs-box{background:#f3f4f6;border-radius:8px;padding:14px;margin:20px 0}
+    .obs-box strong{font-size:11px;display:block;margin-bottom:6px}
+    .obs-box p{font-size:12px;color:#374151}
+    .totals{display:flex;flex-direction:column;align-items:flex-end;gap:6px;margin-bottom:28px}
+    .tot-row{display:flex;gap:0;min-width:260px}
+    .tot-label{background:#1a2744;color:#fff;font-weight:700;font-size:12px;padding:10px 16px;flex:1}
+    .tot-val{background:#374151;color:#fff;font-size:13px;font-weight:700;padding:10px 20px;min-width:130px;text-align:right}
+    .footer{display:flex;justify-content:space-between;align-items:flex-end;margin-top:32px;padding-top:16px;border-top:1px solid #e5e7eb}
+    .firma{text-align:center}
+    .firma-linea{border-top:1px solid #1a2744;padding-top:6px;font-size:11px;font-weight:700;margin-top:32px}
+    .disclaimer{font-size:10px;color:#9ca3af;margin-top:4px}
+    .social{font-size:11px;color:#9ca3af;text-align:center;margin-top:16px}
+    @media print{body{padding:20px;-webkit-print-color-adjust:exact;print-color-adjust:exact}}
+  </style></head><body>
+  <div class="header">
+    <div>
+      <div class="title">RECIBO <span>DE</span> PAGO</div>
+      <div class="sub">Comprobante de pago</div>
+    </div>
+    <div class="logo">
+      <img src="https://i.ibb.co/JJkc7fk/Logo.png" alt="FB Drinkware"
+        style="height:48px;display:block;margin-left:auto">
+    </div>
+  </div>
+  <div class="meta">
+    <div class="meta-item"><label>Fecha</label><div class="val">${fmtFecha(fecha)}</div></div>
+    <div class="meta-item"><label>O.V</label><div class="val">${ov||'—'}</div></div>
+    <div class="meta-item"><label>Folio</label><div class="val">${fbk}</div></div>
+  </div>
+  <div class="field"><label>Recibí de:</label><div class="val">${nombre}</div></div>
+  <div class="field"><label>Ref. Transferencia</label><div class="val">${ref||'—'}</div></div>
+  <div class="field"><label>Domicilio:</label><div class="val">${domicilio||'—'}</div></div>
+  <div class="field"><label>La suma de:</label><div class="val">${fmtNum(abono)} MXN</div></div>
+  <div class="field"><label>Son pesos:</label><div class="val">${numeroALetras(abono)}</div></div>
+  <div class="field"><label>En concepto de:</label><div class="val">${concepto}</div></div>
+  ${obs ? `<div class="obs-box"><strong>Observaciones:</strong><p>${obs}</p></div>` : ''}
+  <div class="totals">
+    <div class="tot-row"><div class="tot-label">TOTAL</div><div class="tot-val">${fmtNum(total)} mxn</div></div>
+    ${esAnticipo ? `
+    <div class="tot-row"><div class="tot-label">ABONO</div><div class="tot-val">${fmtNum(abono)} mxn</div></div>
+    <div class="tot-row"><div class="tot-label">LIQUIDAR</div><div class="tot-val">${fmtNum(liquidar)} mxn</div></div>
+    ` : ''}
+  </div>
+  <div class="footer">
+    <div>
+      <div style="font-size:11px;font-weight:700">Vendedor:</div>
+      <div class="firma-linea">${vendedor}</div>
+      <div class="disclaimer">Documento no válido como factura</div>
+    </div>
+    <div class="firma">
+      <div style="font-size:11px;color:#9ca3af">Gracias por su confianza</div>
+    </div>
+  </div>
+  <div class="social">@fbdrinkware</div>
+  </body></html>`;
+
+  cerrarModal('modal-recibo-pago');
+  const win = window.open('','_blank','width=800,height:700');
+  win.document.write(html);
+  win.document.close();
+  win.onload = () => { win.focus(); win.print(); };
+}
+
+// ── NÚMERO A LETRAS (para recibo de pago) ────────────────────
+function numeroALetras(n) {
+  const num = Math.floor(n);
+  const cents = Math.round((n - num) * 100);
+  const unidades = ['','Un','Dos','Tres','Cuatro','Cinco','Seis','Siete','Ocho','Nueve',
+    'Diez','Once','Doce','Trece','Catorce','Quince','Dieciséis','Diecisiete','Dieciocho','Diecinueve',
+    'Veinte','Veintiún','Veintidós','Veintitrés','Veinticuatro','Veinticinco','Veintiséis','Veintisiete','Veintiocho','Veintinueve'];
+  const decenas = ['','','Veinte','Treinta','Cuarenta','Cincuenta','Sesenta','Setenta','Ochenta','Noventa'];
+  const centenas = ['','Cien','Doscientos','Trescientos','Cuatrocientos','Quinientos','Seiscientos','Setecientos','Ochocientos','Novecientos'];
+  function _conv(n) {
+    if (n===0) return '';
+    if (n < 30) return unidades[n];
+    if (n < 100) {
+      const d = Math.floor(n/10), u = n%10;
+      return u===0 ? decenas[d] : decenas[d] + ' y ' + unidades[u];
+    }
+    if (n===100) return 'Cien';
+    if (n < 1000) {
+      const c = Math.floor(n/100), r = n%100;
+      return centenas[c] + (r>0?' '+_conv(r):'');
+    }
+    if (n < 2000) return 'Mil' + (n%1000>0?' '+_conv(n%1000):'');
+    if (n < 1000000) {
+      const m = Math.floor(n/1000), r = n%1000;
+      return _conv(m)+' Mil'+(r>0?' '+_conv(r):'');
+    }
+    if (n < 2000000) return 'Un Millón'+(n%1000000>0?' '+_conv(n%1000000):'');
+    const m = Math.floor(n/1000000), r = n%1000000;
+    return _conv(m)+' Millones'+(r>0?' '+_conv(r):'');
+  }
+  const texto = num===0 ? 'Cero' : _conv(num);
+  return texto + ' Pesos ' + String(cents).padStart(2,'0') + '/100 M.N.';
+}
+
+// ── REPORTES ─────────────────────────────────────────────────
+let _REP_DATA = []; // caché del último reporte
+
+function repFiltroMes(offset) {
+  const hoy  = new Date();
+  const año  = hoy.getFullYear();
+  const mes  = hoy.getMonth() + offset;
+  const d    = new Date(año, mes, 1);
+  const fin  = new Date(año, mes + 1, 0);
+  const pad  = n => String(n).padStart(2,'0');
+  document.getElementById('rep-desde').value = d.getFullYear() + '-' + pad(d.getMonth()+1) + '-01';
+  document.getElementById('rep-hasta').value = fin.getFullYear() + '-' + pad(fin.getMonth()+1) + '-' + pad(fin.getDate());
+}
+
+async function ejecutarReporte() {
+  const desde  = document.getElementById('rep-desde').value;
+  const hasta  = document.getElementById('rep-hasta').value;
+  const estado = document.getElementById('rep-estado').value;
+  const esAdmin= S.asesor?.jerarquia === 'Admin';
+  const asesor = esAdmin
+    ? (document.getElementById('rep-asesor')?.value || 'TODOS')
+    : S.asesor.codigo;
+
+  if (!desde || !hasta) { showToast('Selecciona el rango de fechas'); return; }
+
+  // Convertir YYYY-MM-DD a DD/MM/YYYY para el backend
+  const fmtBk = d => { const [y,m,dd]=d.split('-'); return dd+'/'+m+'/'+y; };
+
+  document.getElementById('rep-tabla').innerHTML = '<p class="text-xs text-fb-silver text-center py-4">Cargando...</p>';
+  document.getElementById('rep-kpis').style.display = 'none';
+  document.getElementById('rep-export').style.display = 'none';
+
+  const res = await apiGet('getReporte', {
+    asesor, desde: fmtBk(desde), hasta: fmtBk(hasta), estado
+  });
+  if (!res?.ok) { showToast('Error al cargar reporte: '+(res?.error||''), 'error'); return; }
+  _REP_DATA = res.pedidos || [];
+  _renderReporte();
+}
+
+function _renderReporte() {
+  const pedidos = _REP_DATA;
+  if (!pedidos.length) {
+    document.getElementById('rep-tabla').innerHTML =
+      '<p class="text-xs text-fb-silver text-center py-6">Sin pedidos en el período seleccionado.</p>';
+    return;
+  }
+
+  // KPIs
+  const totalMonto  = pedidos.reduce((s,p)=>s+p.totalMonto,0);
+  const totalPiezas = pedidos.reduce((s,p)=>s+p.totalPiezas,0);
+  document.getElementById('rep-kpi-pedidos').textContent = pedidos.length;
+  document.getElementById('rep-kpi-piezas').textContent  = totalPiezas.toLocaleString('es-MX');
+  document.getElementById('rep-kpi-monto').textContent   =
+    '$'+totalMonto.toLocaleString('es-MX',{minimumFractionDigits:2});
+  document.getElementById('rep-kpis').style.display = 'grid';
+  document.getElementById('rep-export').style.display = 'block';
+
+  // Agrupar por cliente
+  const porCliente = {};
+  pedidos.forEach(p => {
+    const key = p.cliente || 'Sin nombre';
+    if (!porCliente[key]) porCliente[key] = { cliente:key, pedidos:[], monto:0, piezas:0 };
+    porCliente[key].pedidos.push(p);
+    porCliente[key].monto  += p.totalMonto;
+    porCliente[key].piezas += p.totalPiezas;
+  });
+  const clientes = Object.values(porCliente).sort((a,b)=>b.monto-a.monto);
+
+  const fmt = n => '$'+Number(n).toLocaleString('es-MX',{minimumFractionDigits:2});
+  var html = '';
+  clientes.forEach((c,ci) => {
+    const rowId = 'rep-cl-'+ci;
+    html += '<div style="border:1px solid #e5e7eb;border-radius:10px;margin-bottom:8px;overflow:hidden">';
+    html += '<div onclick="_repToggle(\''+rowId+'\')" style="display:flex;justify-content:space-between;align-items:center;padding:10px 14px;background:#f8f9fb;cursor:pointer;gap:8px">';
+    html += '<div style="flex:1;min-width:0"><div style="font-weight:700;font-size:12px;color:#1a2744;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+c.cliente+'</div>';
+    html += '<div style="font-size:10px;color:#9ca3af">'+c.pedidos.length+' pedido'+(c.pedidos.length!==1?'s':'')+' · '+c.piezas.toLocaleString('es-MX')+' pzas</div></div>';
+    html += '<div style="font-weight:700;color:#166534;font-size:13px;flex-shrink:0">'+fmt(c.monto)+'</div>';
+    html += '<div style="color:#9ca3af;font-size:12px;flex-shrink:0" id="rep-arr-'+ci+'">▶</div></div>';
+    // Filas de pedidos (ocultas por default)
+    html += '<div id="'+rowId+'" style="display:none">';
+    c.pedidos.forEach(p => {
+      const prods = (p.productos||[]).slice(0,3).map(pr=>pr.sku+(pr.cant?' ×'+pr.cant:'')).join(', ');
+      const masProds = (p.productos||[]).length > 3 ? ' +'+((p.productos.length-3)+' más') : '';
+      html += '<div style="padding:8px 14px;border-top:1px solid #f3f4f6;display:flex;justify-content:space-between;align-items:flex-start;gap:8px">';
+      html += '<div style="flex:1;min-width:0">';
+      html += '<div style="font-size:10px;font-weight:700;color:#184273;font-family:monospace">'+p.id+'</div>';
+      html += '<div style="font-size:10px;color:#9ca3af">'+p.fecha+' · '+p.asesorNombre+'</div>';
+      html += '<div style="font-size:10px;color:#374151;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+prods+masProds+'</div>';
+      html += '<span style="font-size:9px;padding:1px 6px;border-radius:10px;background:#f3f4f6;color:#6b7280">'+p.estado+'</span>';
+      html += '</div><div style="font-weight:600;font-size:11px;color:#1a2744;flex-shrink:0">'+fmt(p.totalMonto)+'</div></div>';
+    });
+    html += '</div></div>';
+  });
+  document.getElementById('rep-tabla').innerHTML = html;
+}
+
+function _repToggle(id) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  const abierto = el.style.display !== 'none';
+  el.style.display = abierto ? 'none' : 'block';
+  const ci = id.replace('rep-cl-','');
+  const arr = document.getElementById('rep-arr-'+ci);
+  if (arr) arr.textContent = abierto ? '▶' : '▼';
+}
+
+function repExportarCSV() {
+  if (!_REP_DATA.length) return;
+  const header = 'FBK\tFecha\tCliente\tAsesor\tEstado\tPiezas\tMonto\tNum Factura\tFecha Factura';
+  const filas = _REP_DATA.map(p =>
+    [p.id,p.fecha,p.cliente,p.asesorNombre,p.estado,p.totalPiezas,
+     p.totalMonto.toFixed(2),p.numFactura||'',p.fechaFactura||''].join('\t')
+  );
+  const csv = header + '\n' + filas.join('\n');
+  const blob = new Blob([csv], {type:'text/tab-separated-values;charset=utf-8'});
+  const url  = URL.createObjectURL(blob);
+  const a    = document.createElement('a');
+  a.href=url; a.download='Reporte_FBDrinkware.tsv'; a.click();
+  URL.revokeObjectURL(url);
+  showToast('Reporte exportado ✅');
+}
+
+// Si es Admin, cargar lista de asesores en el selector del reporte
+async function _initReporteAdmin() {
+  if (S.asesor?.jerarquia !== 'Admin') return;
+  document.getElementById('rep-campo-asesor').style.display = 'block';
+  if (LISTA_ASESORES.length > 0) {
+    const sel = document.getElementById('rep-asesor');
+    LISTA_ASESORES.forEach(a => {
+      const opt = document.createElement('option');
+      opt.value = a.codigo; opt.textContent = a.nombre + ' (' + a.codigo + ')';
+      sel.appendChild(opt);
+    });
+  }
 }
 
 // Inicializar cotizador al cargar
@@ -2915,15 +3381,21 @@ function renderPasos() {
         const yaOk = !!(ps['pago']?.ok);
         const refGuardada = p.refPago || '';
         if (yaOk) {
-          // Paso completado: mostrar referencia en solo lectura
-          return `<div class="mt-2 text-xs text-green-700 font-bold">
-            ${refGuardada ? 'Ref. de pago: ' + refGuardada : ''}
+          return `<div class="mt-2 space-y-2">
+            ${refGuardada ? '<div class="text-xs text-green-700 font-bold">Ref. de pago: ' + refGuardada + '</div>' : ''}
+            <button onclick="abrirModalRecibo()" class="btn-outline w-full text-xs">🧾 Generar recibo de pago</button>
           </div>`;
         }
-        const esTDC = p.formaPago?.includes('TDC');
-        const btnAccion = esTDC
-          ? `<button onclick="window.open('${CLIP_URL}','_blank')" class="btn-action btn-wa w-full justify-center mb-3">💳 Abrir CLIP</button>`
-          : `<button onclick="abrirModalTransferencia()" class="btn-action btn-copy w-full justify-center mb-3">🏦 Ver datos de transferencia</button>`;
+        const esTDC    = p.formaPago?.includes('TDC') || p.formaPago?.includes('TDD');
+        const sinForma = !p.formaPago;
+        const btnAccion = sinForma
+          ? `<div class="flex gap-2 mb-3">
+               <button onclick="abrirModalTransferencia()" class="btn-action btn-copy flex-1 justify-center">🏦 Transferencia</button>
+               <button onclick="window.open('${CLIP_URL}','_blank')" class="btn-action btn-wa flex-1 justify-center">💳 CLIP</button>
+             </div>`
+          : esTDC
+            ? `<button onclick="window.open('${CLIP_URL}','_blank')" class="btn-action btn-wa w-full justify-center mb-3">💳 Abrir CLIP</button>`
+            : `<button onclick="abrirModalTransferencia()" class="btn-action btn-copy w-full justify-center mb-3">🏦 Ver datos de transferencia</button>`;
         return `${btnAccion}<div class="campo mt-1">
           <label>Referencia de pago <span class="text-red-500">*</span></label>
           <div class="flex gap-2 items-center mt-1">
@@ -3038,17 +3510,21 @@ function renderPasos() {
       campoExtra: (() => {
         const yaEntregado = !!(ps['envio']?.ok);
         const yaEnviado   = !!(ps['enviado']?.ok);
-        const numFact = p.numFactura || '';
+        const numFact  = p.numFactura   || '';
+        const fechaFact= p.fechaFactura || '';
         const tsEnviado = ps['enviado']?.ts || '';
         return `<div class="campo mt-3">
-          <label>Factura número</label>
+          <label>Factura número y fecha (EPICOR)</label>
           <div class="flex gap-2 items-center mt-1">
             <input type="text" id="inp-num-factura" placeholder="Ej: F-2026-00123"
               class="flex-1 border border-fb-light rounded-xl px-3 py-2 text-sm outline-none focus:border-fb-dark"
               value="${numFact}">
+            <input type="date" id="inp-fecha-factura"
+              class="border border-fb-light rounded-xl px-3 py-2 text-sm outline-none focus:border-fb-dark"
+              style="max-width:140px" value="${fechaFact}">
             <button onclick="guardarNumFactura()" class="btn-outline text-xs px-3 py-2 flex-shrink-0">Guardar</button>
           </div>
-          ${numFact ? `<div class="text-[10px] font-bold mt-1" style="color:#184273;">✅ Factura guardada: ${numFact}</div>` : '<div class="text-[10px] text-fb-silver mt-1">Sin factura guardada aún</div>'}
+          ${numFact ? `<div class="text-[10px] font-bold mt-1" style="color:#184273;">✅ Factura: ${numFact}${fechaFact?' · '+fechaFact:''}</div>` : '<div class="text-[10px] text-fb-silver mt-1">Sin factura guardada aún</div>'}
         </div>
         <div class="flex items-center gap-3 mt-3">
           <input type="checkbox" id="chk-enviado" onchange="marcarPedidoEnviado(this)"
@@ -3971,14 +4447,20 @@ async function guardarRefPago() {
 }
 
 async function guardarNumFactura() {
-  const num = document.getElementById('inp-num-factura')?.value?.trim();
+  const num   = document.getElementById('inp-num-factura')?.value?.trim();
+  const fecha = document.getElementById('inp-fecha-factura')?.value?.trim() || '';
   if (!num) { showToast('Ingresa el número de factura'); return; }
-  showLoading('Guardando número de factura...');
+  showLoading('Guardando datos de factura...');
   await apiPost({ action:'guardarCampoExtra', fbk:S.pedido.id,
     campo:'NUM_FACTURA', valor:num, quien:S.asesor.nombre });
   S.pedido.numFactura = num;
+  if (fecha) {
+    await apiPostWithData({ action:'guardarFechaFactura',
+      fbk:S.pedido.id, fecha, quien:S.asesor.nombre });
+    S.pedido.fechaFactura = fecha;
+  }
   hideLoading();
-  showToast('Número de factura guardado ✅');
+  showToast('Factura guardada ✅');
   renderPasos();
 }
 
@@ -5155,7 +5637,7 @@ function copiarTablaEPICOR() {
     const unitConIVA = Number(pr.precioUnit || pr.precio || 0);
     const unitSinIVA = (unitConIVA / 1.16).toFixed(2);
     // TSV: A=vacío  B=vacío  C=SKU  D=cant  E=vacío  F=desc  G=vacío  H=precio s/IVA
-    return `${skuProd}\t${cant}\t${unitSinIVA}`;
+    return `\t\t${skuProd}\t${cant}\t\t${descProd}\t\t${unitSinIVA}`;
   });
   navigator.clipboard.writeText(rows.join('\n'));
   showToast('Tabla EPICOR copiada — pega directamente en la OV ✅');
@@ -5207,6 +5689,103 @@ function copiarTablaOV() {
     <div id="cot-hist-tabs"></div>
     <div id="cot-hist-body" class="max-h-72 overflow-y-auto mb-4"></div>
     <button onclick="cerrarModal('modal-historial-cot')" class="btn-outline w-full text-xs">Cerrar</button>
+  </div>
+</div>
+
+<!-- ══ MODAL: Datos de pago en cotizador ══ -->
+<div class="modal-overlay" id="modal-datos-pago-cot" style="display:none">
+  <div class="modal-box" style="max-width:440px;width:96%">
+    <h3 class="font-black text-fb-dark text-base mb-3">🏦 Datos de pago</h3>
+    <!-- Pestañas transferencia / CLIP -->
+    <div class="flex gap-2 mb-4">
+      <button id="btn-tab-transf" onclick="_cotPagoTab('transferencia')"
+        class="flex-1 py-2 rounded-xl text-xs font-bold border-2 border-fb-dark bg-fb-dark text-white">
+        🏦 Transferencia
+      </button>
+      <button id="btn-tab-clip" onclick="_cotPagoTab('clip')"
+        class="flex-1 py-2 rounded-xl text-xs font-bold border-2 border-fb-light text-fb-silver">
+        💳 CLIP
+      </button>
+    </div>
+    <div id="pago-cot-transf">
+      <div class="bg-[#f8f9fb] rounded-xl p-4 text-xs font-mono whitespace-pre-wrap border border-fb-light mb-3"
+        id="datos-banco-cot"></div>
+      <button onclick="_copiarDatosBancoCot()"
+        class="btn-outline w-full text-xs">📋 Copiar datos</button>
+    </div>
+    <div id="pago-cot-clip" style="display:none">
+      <p class="text-xs text-fb-silver mb-3">Genera el link de pago desde el panel de CLIP:</p>
+      <button onclick="window.open('${CLIP_URL}','_blank');cerrarModal('modal-datos-pago-cot')"
+        class="btn-primary w-full text-sm">💳 Abrir CLIP</button>
+    </div>
+    <button onclick="cerrarModal('modal-datos-pago-cot')" class="btn-outline w-full text-xs mt-3">Cerrar</button>
+  </div>
+</div>
+
+<!-- ══ MODAL: Recibo de pago ══ -->
+<div class="modal-overlay" id="modal-recibo-pago" style="display:none">
+  <div class="modal-box" style="max-width:520px;width:96%;max-height:90vh;overflow-y:auto">
+    <h3 class="font-black text-fb-dark text-base mb-1">🧾 Generar recibo de pago</h3>
+    <p class="text-[11px] text-fb-silver mb-4">Revisa y ajusta los datos antes de imprimir.</p>
+    <div class="space-y-2 mb-4">
+      <div class="grid grid-cols-2 gap-2">
+        <div class="campo">
+          <label>Fecha</label>
+          <input type="date" id="rec-fecha" class="w-full">
+        </div>
+        <div class="campo">
+          <label>OV EPICOR</label>
+          <input type="text" id="rec-ov" class="w-full" placeholder="Ej: 225701">
+        </div>
+      </div>
+      <div class="campo">
+        <label>FBK (referencia)</label>
+        <input type="text" id="rec-fbk" class="w-full">
+      </div>
+      <div class="campo">
+        <label>Recibí de</label>
+        <input type="text" id="rec-nombre" class="w-full">
+      </div>
+      <div class="campo">
+        <label>Ref. Transferencia</label>
+        <input type="text" id="rec-ref" class="w-full" placeholder="Número de referencia">
+      </div>
+      <div class="campo">
+        <label>Domicilio (fiscal)</label>
+        <input type="text" id="rec-domicilio" class="w-full">
+      </div>
+      <!-- Toggle anticipo/completo -->
+      <div class="flex items-center gap-3 bg-[#f8f9fb] rounded-xl px-4 py-3">
+        <input type="checkbox" id="rec-es-anticipo" onchange="_recToggleAnticipo(this)">
+        <label for="rec-es-anticipo" class="text-xs font-bold cursor-pointer text-fb-dark">Pago parcial (anticipo)</label>
+      </div>
+      <div class="campo">
+        <label>Total del pedido</label>
+        <input type="number" id="rec-total" class="w-full" step="0.01" oninput="_recRecalcular()">
+      </div>
+      <div id="rec-bloque-anticipo" style="display:none">
+        <div class="campo">
+          <label>Abono (este pago)</label>
+          <input type="number" id="rec-abono" class="w-full" step="0.01" oninput="_recRecalcular()">
+        </div>
+        <div class="flex justify-between items-center text-xs text-fb-silver px-1 mt-1">
+          <span>Pendiente a liquidar:</span>
+          <span id="rec-liquidar-preview" class="font-bold text-fb-dark">$0.00</span>
+        </div>
+      </div>
+      <div class="campo">
+        <label>En concepto de</label>
+        <input type="text" id="rec-concepto" class="w-full">
+      </div>
+      <div class="campo">
+        <label>Observaciones</label>
+        <textarea id="rec-obs" rows="2" class="w-full border border-fb-light rounded-xl px-3 py-2 text-xs outline-none focus:border-fb-dark resize-none"></textarea>
+      </div>
+    </div>
+    <div class="flex gap-2">
+      <button onclick="cerrarModal('modal-recibo-pago')" class="btn-outline flex-1 text-sm">Cancelar</button>
+      <button onclick="generarReciboPDF()" class="btn-primary flex-1 text-sm">🖨️ Imprimir recibo</button>
+    </div>
   </div>
 </div>
 
