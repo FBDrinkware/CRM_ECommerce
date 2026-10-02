@@ -823,6 +823,17 @@
     <div class="seccion">📊 Reporte de ventas</div>
     <!-- Filtros -->
     <div class="space-y-3 mb-4">
+      <!-- Tipo de fecha -->
+      <div class="flex gap-2">
+        <button id="rep-btn-fecha-pedido" onclick="repSetTipoFecha('pedido')"
+          style="flex:1;padding:7px 10px;border-radius:10px;font-size:11px;font-weight:700;border:2px solid #184273;background:#184273;color:#fff;cursor:pointer">
+          📅 Por fecha de pedido
+        </button>
+        <button id="rep-btn-fecha-factura" onclick="repSetTipoFecha('factura')"
+          style="flex:1;padding:7px 10px;border-radius:10px;font-size:11px;font-weight:700;border:2px solid #e2e8f0;background:#fff;color:#9ca3af;cursor:pointer">
+          🧾 Por fecha de factura
+        </button>
+      </div>
       <div class="flex gap-2 flex-wrap">
         <div class="campo flex-1" style="min-width:130px">
           <label>Desde</label>
@@ -832,7 +843,7 @@
           <label>Hasta</label>
           <input type="date" id="rep-hasta" class="w-full">
         </div>
-        <div class="campo flex-1" style="min-width:130px" id="rep-campo-asesor" style="display:none">
+        <div class="campo flex-1" style="min-width:130px" id="rep-campo-asesor">
           <label>Asesor</label>
           <select id="rep-asesor" class="w-full border border-fb-light rounded-xl px-3 py-2 text-sm">
             <option value="TODOS">Todos</option>
@@ -2284,7 +2295,21 @@ function numeroALetras(n) {
 }
 
 // ── REPORTES ─────────────────────────────────────────────────
-let _REP_DATA = []; // caché del último reporte
+let _REP_DATA = [];       // caché del último reporte
+let _REP_TIPO_FECHA = 'pedido'; // 'pedido' | 'factura'
+
+function repSetTipoFecha(tipo) {
+  _REP_TIPO_FECHA = tipo;
+  const esPedido = tipo === 'pedido';
+  document.getElementById('rep-btn-fecha-pedido').style.cssText =
+    'flex:1;padding:7px 10px;border-radius:10px;font-size:11px;font-weight:700;cursor:pointer;' +
+    (esPedido ? 'border:2px solid #184273;background:#184273;color:#fff'
+               : 'border:2px solid #e2e8f0;background:#fff;color:#9ca3af');
+  document.getElementById('rep-btn-fecha-factura').style.cssText =
+    'flex:1;padding:7px 10px;border-radius:10px;font-size:11px;font-weight:700;cursor:pointer;' +
+    (!esPedido ? 'border:2px solid #184273;background:#184273;color:#fff'
+               : 'border:2px solid #e2e8f0;background:#fff;color:#9ca3af');
+}
 
 function repFiltroMes(offset) {
   const hoy  = new Date();
@@ -2316,7 +2341,8 @@ async function ejecutarReporte() {
   document.getElementById('rep-export').style.display = 'none';
 
   const res = await apiGet('getReporte', {
-    asesor, desde: fmtBk(desde), hasta: fmtBk(hasta), estado
+    asesor, desde: fmtBk(desde), hasta: fmtBk(hasta), estado,
+    tipoFecha: _REP_TIPO_FECHA,
   });
   if (!res?.ok) { showToast('Error al cargar reporte: '+(res?.error||''), 'error'); return; }
   _REP_DATA = res.pedidos || [];
@@ -2406,18 +2432,32 @@ function repExportarCSV() {
   showToast('Reporte exportado ✅');
 }
 
-// Si es Admin, cargar lista de asesores en el selector del reporte
+// Inicializar selector de asesor en reportes
 async function _initReporteAdmin() {
-  if (S.asesor?.jerarquia !== 'Admin') return;
-  document.getElementById('rep-campo-asesor').style.display = 'block';
-  if (LISTA_ASESORES.length > 0) {
+  const campoAsesor = document.getElementById('rep-campo-asesor');
+  if (!campoAsesor) return;
+  if (S.asesor?.jerarquia !== 'Admin') {
+    campoAsesor.style.display = 'none'; // no-Admin no ve el selector
+    return;
+  }
+  campoAsesor.style.display = 'block';
+  // Poblar con lista de asesores (disponible tras login)
+  const poblar = () => {
+    if (!LISTA_ASESORES.length) return;
     const sel = document.getElementById('rep-asesor');
+    // Evitar duplicados si se llama varias veces
+    if (sel.options.length > 1) return;
     LISTA_ASESORES.forEach(a => {
       const opt = document.createElement('option');
-      opt.value = a.codigo; opt.textContent = a.nombre + ' (' + a.codigo + ')';
+      opt.value = a.codigo;
+      opt.textContent = a.nombre + ' (' + a.codigo + ')';
       sel.appendChild(opt);
     });
-  }
+  };
+  if (LISTA_ASESORES.length > 0) { poblar(); return; }
+  // Si la lista aún no cargó, esperar un poco más
+  const res = await apiGet('getListaAsesores');
+  if (res?.ok) { LISTA_ASESORES = res.asesores || []; poblar(); }
 }
 
 // Inicializar cotizador al cargar
@@ -4506,9 +4546,13 @@ function guardarSession() {
 }
 
 function showTab(id, btn) {
-  document.querySelectorAll('.screen').forEach(s=>s.classList.remove('active'));
+  document.querySelectorAll('.screen').forEach(s => {
+    s.classList.remove('active');
+    s.style.display = ''; // limpia cualquier display:none inline
+  });
   document.querySelectorAll('.tab-btn').forEach(b=>b.classList.remove('active'));
-  document.getElementById(id).classList.add('active');
+  const el = document.getElementById(id);
+  if (el) { el.style.display = ''; el.classList.add('active'); }
   if (btn) btn.classList.add('active');
 }
 
