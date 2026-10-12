@@ -3609,7 +3609,7 @@ function renderPasos() {
         const yaEntregado = !!(ps['envio']?.ok);
         const yaEnviado   = !!(ps['enviado']?.ok);
         const numFact  = p.numFactura   || '';
-        const fechaFact= p.fechaFactura || '';
+        const fechaFact= _fechaInputISO(p.fechaFactura);
         const tsEnviado = ps['enviado']?.ts || '';
         return `<div class="campo mt-3">
           <label>Factura número y fecha (EPICOR)</label>
@@ -3622,7 +3622,7 @@ function renderPasos() {
               style="max-width:140px" value="${fechaFact}">
             <button onclick="guardarNumFactura()" class="btn-outline text-xs px-3 py-2 flex-shrink-0">Guardar</button>
           </div>
-          ${numFact ? `<div class="text-[10px] font-bold mt-1" style="color:#184273;">✅ Factura: ${numFact}${fechaFact?' · '+fechaFact:''}</div>` : '<div class="text-[10px] text-fb-silver mt-1">Sin factura guardada aún</div>'}
+          ${numFact ? `<div class="text-[10px] font-bold mt-1" style="color:#184273;">✅ Factura: ${numFact}${fechaFact?' · '+fmtFecha(fechaFact):''}</div>` : '<div class="text-[10px] text-fb-silver mt-1">Sin factura guardada aún</div>'}
         </div>
         <div class="flex items-center gap-3 mt-3">
           <input type="checkbox" id="chk-enviado" onchange="marcarPedidoEnviado(this)"
@@ -4615,6 +4615,19 @@ function showTab(id, btn) {
 }
 
 function cerrarModal(id) { document.getElementById(id).style.display='none'; }
+
+// Convierte cualquier fecha recibida a 'YYYY-MM-DD' para <input type="date">
+function _fechaInputISO(v) {
+  if (!v) return '';
+  const s = v.toString().trim();
+  let m = s.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (m) return `${m[1]}-${m[2]}-${m[3]}`;
+  m = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/);
+  if (m) return `${m[3]}-${m[2].padStart(2,'0')}-${m[1].padStart(2,'0')}`;
+  const d = new Date(s);
+  if (isNaN(d.getTime())) return '';
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+}
 
 // Formatea fecha ISO o YYYY-MM-DD a DD/MM/YYYY
 function fmtFecha(f) {
