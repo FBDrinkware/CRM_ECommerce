@@ -3411,6 +3411,10 @@ function renderPasos() {
   const disenoPedidoDone = !!(ps['diseno-gmail']?.ok);
   const disenoDone = !!(ps['diseno-aprobado']?.ok);
   const prodIniciada = S.produccionIniciada;
+  // Fuente de verdad de "entregado": el estado del pedido (columna Estado del Sheet).
+  // Antes el paso 7 se basaba en pasos.envio y el paso 8 en el estado; si no coincidían,
+  // el 7 se veía completado y el 8 quedaba bloqueado.
+  const entregado = (p.estado||'').toString().trim().toLowerCase() === 'entregado';
 
   const PASOS = [
     { id:'venta', num:'✓', titulo:'Estado confirmado',
@@ -3601,12 +3605,12 @@ function renderPasos() {
       })(),
     },
         { id:'envio', num:'7', titulo:'Seguimiento de envío', icono:'📦',
-      sub: ps['envio']?.ok ? 'Entregado' : ps['enviado']?.ok ? 'Pedido en camino — esperando confirmación de entrega' : 'Avisa al cliente que su pedido está en camino',
+      sub: entregado ? 'Entregado' : ps['enviado']?.ok ? 'Pedido en camino — esperando confirmación de entrega' : 'Avisa al cliente que su pedido está en camino',
       locked: !(ps['produccion']?.ok),
-      done: !!(ps['envio']?.ok),
+      done: entregado,
       accion: () => waEnvio(), accionLabel: 'WhatsApp',
       campoExtra: (() => {
-        const yaEntregado = !!(ps['envio']?.ok);
+        const yaEntregado = entregado;
         const yaEnviado   = !!(ps['enviado']?.ok);
         const numFact  = p.numFactura   || '';
         const fechaFact= _fechaInputISO(p.fechaFactura);
@@ -3643,7 +3647,7 @@ function renderPasos() {
     },
     { id:'postventa', num:'8', titulo:'Post-venta', icono:'⭐',
       sub: 'Mensaje de satisfacción al cliente',
-      locked: p.estado !== 'Entregado',
+      locked: !entregado,
       done: !!(ps['postventa']?.ok),
       accion: () => waPostventa(), accionLabel: 'WhatsApp',
       campoExtra: ['Admin','Editor'].includes(S.asesor.jerarquia) ? `
@@ -4071,9 +4075,13 @@ function waEnvio() {
   const tel = '52' + String(p.telefono||'').replace(/\D/g,'');
   const msg = `Hola ${p.nombreContacto||p.nombreComercial}!\n\n¡Tu pedido (${p.id}) esta en camino! En breve recibiras la guia de rastreo.\n\nCualquier duda, estamos a tus ordenes. ¡Gracias por confiar en nosotros!`;
   window.open(`https://wa.me/${tel}?text=${enc(msg)}`,'_blank');
-  apiPost({ action:'cambiarEstado', fbk:p.id, estado:'En camino', quien:S.asesor.nombre });
-  S.pedido.estado = 'En camino';
-  marcarPaso('envio');
+  // Solo avisa "en camino": no debe marcar el pedido como entregado (paso 'envio').
+  if ((p.estado||'').toString().trim() !== 'Entregado') {
+    apiPost({ action:'cambiarEstado', fbk:p.id, estado:'En camino', quien:S.asesor.nombre });
+    S.pedido.estado = 'En camino';
+  }
+  if (!S.pasos?.['enviado']?.ok) marcarPaso('enviado');
+  else showToast('Mensaje de WhatsApp abierto');
 }
 
 function waPostventa() {
