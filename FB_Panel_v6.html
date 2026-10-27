@@ -2580,7 +2580,7 @@ function renderLista(lista, contenedorId, esPorAtender) {
     <div class="pendiente-card" onclick="cargarPedidoDesdeListado('${p.id}')">
       <div class="flex items-start justify-between gap-2 flex-wrap">
         <div>
-          <div class="font-mono text-[10px] text-fb-silver">${p.id}${p.asesorNombreReal||p.asesorNombre ? ' · ' + (p.asesorNombreReal||p.asesorNombre) : ''}</div>
+          <div class="font-mono text-[10px] text-fb-silver">${p.id}${p.asesorNombreReal||p.asesorNombre ? ' · ' + (p.asesorNombreReal||p.asesorNombre) : ''}${badgeAnticipo(p)}</div>
           <div class="font-bold text-fb-dark text-sm mt-0.5">${/PUBLICO EN GENERAL/i.test(p.empresa||'') ? (p.contacto||p.empresa) : (p.empresa||p.contacto)}</div>
           <div class="text-xs text-fb-mid">${/PUBLICO EN GENERAL/i.test(p.empresa||'') ? (p.empresa||'') : (p.contacto||'')} ${p.ovEpicor ? "· " + p.ovEpicor : ""}</div>
         </div>
@@ -2696,7 +2696,7 @@ function renderPendientesPorEtapa(todos) {
       return `<div class="pendiente-card" onclick="cargarPedidoDesdeListado('${p.id}')">
         <div class="flex items-start justify-between gap-2">
           <div>
-            <div class="font-mono text-[10px] text-fb-silver">${p.id}${p.asesorNombreReal||p.asesorNombre ? ' · ' + (p.asesorNombreReal||p.asesorNombre) : ''}</div>
+            <div class="font-mono text-[10px] text-fb-silver">${p.id}${p.asesorNombreReal||p.asesorNombre ? ' · ' + (p.asesorNombreReal||p.asesorNombre) : ''}${badgeAnticipo(p)}</div>
             <div class="font-bold text-fb-dark text-sm">${nombre}</div>
             <div class="text-xs text-fb-mid">${esPG ? (p.empresa||'') : (p.contacto||'')} ${p.ovEpicor ? "· " + p.ovEpicor : ""}</div>
           </div>
@@ -3984,7 +3984,9 @@ function confirmarEnvioProduccion() {
   const lineaAnticipo = (_requiereFacturaAnticipo() && p.numFacturaAnticipo)
     ? `\n\nIMPORTANTE — FACTURA DE ANTICIPO: este pedido cuenta con la factura de anticipo ${p.numFacturaAnticipo}` +
       ` del ${fmtFecha(_fechaInputISO(p.fechaFacturaAnticipo))}. Favor de relacionar la factura de mercancía` +
-      ` con dicha factura de anticipo (CFDI relacionado, tipo de relación 07 – Aplicación de anticipo).`
+      ` con dicha factura de anticipo.` +
+      `\n\nAdicionalmente, solicito que esperen mis indicaciones antes de facturar y enviar el producto,` +
+      ` ya que el cliente aún tiene pendiente liquidar el saldo restante.`
     : '';
 
   const dir = (!p.dirEnvio || p.dirEnvio === 'PENDIENTE')
@@ -4651,6 +4653,14 @@ async function toggleNoAplicaAnticipo(el) {
   showToast(marcar ? 'Factura de anticipo marcada como no requerida' : 'Paso de factura de anticipo reactivado');
 }
 
+// Etiqueta para las tarjetas del listado: pedidos con correo de factura de anticipo enviado
+function badgeAnticipo(p) {
+  const pa = (p.pasos || {})['fac-anticipo'] || {};
+  if (!pa.ok || pa.noAplica) return '';
+  return ` <span class="font-sans font-bold text-[9px] px-1.5 py-0.5 rounded-full align-middle"
+    style="background:#fef3c7;color:#92400e;" title="Correo de factura de anticipo enviado">🧾 Anticipo</span>`;
+}
+
 // ¿El pedido tiene factura de anticipo solicitada (correo enviado y no marcada como "no aplica")?
 function _requiereFacturaAnticipo() {
   const pa = (S.pasos || {})['fac-anticipo'] || {};
@@ -4947,7 +4957,7 @@ function renderCerrados(lista) {
     return `<div class="pendiente-card" onclick="cargarPedidoDesdeListado('${p.id}')">
       <div class="flex items-start justify-between gap-2">
         <div>
-          <div class="font-mono text-[10px] text-fb-silver">${p.id}${p.asesorNombreReal||p.asesorNombre ? ' · ' + (p.asesorNombreReal||p.asesorNombre) : ''}</div>
+          <div class="font-mono text-[10px] text-fb-silver">${p.id}${p.asesorNombreReal||p.asesorNombre ? ' · ' + (p.asesorNombreReal||p.asesorNombre) : ''}${badgeAnticipo(p)}</div>
           <div class="font-bold text-fb-dark text-sm">${/PUBLICO EN GENERAL/i.test(p.empresa||'') ? (p.contacto||p.empresa) : (p.empresa||p.contacto)}</div>
           <div class="text-xs text-fb-mid">${/PUBLICO EN GENERAL/i.test(p.empresa||'') ? (p.empresa||'') : (p.contacto||'')} ${p.ovEpicor ? "· " + p.ovEpicor : ""}</div>
           ${p.numFactura ? `<div class="text-[10px] text-fb-silver mt-0.5">Factura: ${p.numFactura}</div>` : ''}
@@ -4984,7 +4994,7 @@ function renderTransito(lista) {
     return `<div class="pendiente-card" onclick="cargarPedidoDesdeListado('${p.id}')">
       <div class="flex items-start justify-between gap-2">
         <div>
-          <div class="font-mono text-[10px] text-fb-silver">${p.id}${p.asesorNombreReal||p.asesorNombre ? ' · ' + (p.asesorNombreReal||p.asesorNombre) : ''}</div>
+          <div class="font-mono text-[10px] text-fb-silver">${p.id}${p.asesorNombreReal||p.asesorNombre ? ' · ' + (p.asesorNombreReal||p.asesorNombre) : ''}${badgeAnticipo(p)}</div>
           <div class="font-bold text-fb-dark text-sm">${nombreGrande}</div>
           <div class="text-xs text-fb-mid">${nombreChico} ${p.ovEpicor ? '· ' + p.ovEpicor : ''}</div>
           ${fechaEnv ? `<div class="text-[10px] text-blue-500 mt-0.5">🚚${fechaEnv}</div>` : ''}
@@ -5022,7 +5032,7 @@ function renderMesAnterior(lista) {
     return `<div class="pendiente-card" onclick="cargarPedidoDesdeListado('${p.id}')">
       <div class="flex items-start justify-between gap-2">
         <div>
-          <div class="font-mono text-[10px] text-fb-silver">${p.id}${p.asesorNombreReal||p.asesorNombre ? ' · ' + (p.asesorNombreReal||p.asesorNombre) : ''}</div>
+          <div class="font-mono text-[10px] text-fb-silver">${p.id}${p.asesorNombreReal||p.asesorNombre ? ' · ' + (p.asesorNombreReal||p.asesorNombre) : ''}${badgeAnticipo(p)}</div>
           <div class="font-bold text-fb-dark text-sm">${nombreGrande}</div>
           <div class="text-xs text-fb-mid">${nombreChico} ${p.ovEpicor ? '· ' + p.ovEpicor : ''}</div>
           ${p.numFactura ? `<div class="text-[10px] text-fb-silver mt-0.5">Factura: ${p.numFactura}</div>` : ''}
@@ -5059,7 +5069,7 @@ function renderFrias(lista) {
     return `<div class="card-fria">
       <div class="flex items-start justify-between gap-2 mb-2">
         <div>
-          <div class="font-mono text-[10px] text-fb-silver">${p.id}${p.asesorNombreReal||p.asesorNombre ? ' · ' + (p.asesorNombreReal||p.asesorNombre) : ''}</div>
+          <div class="font-mono text-[10px] text-fb-silver">${p.id}${p.asesorNombreReal||p.asesorNombre ? ' · ' + (p.asesorNombreReal||p.asesorNombre) : ''}${badgeAnticipo(p)}</div>
           <div class="font-bold text-sm" style="color:#334e68">${nombreGrande}</div>
           <div class="text-xs text-fb-mid">${nombreChico} ${p.ovEpicor ? "· " + p.ovEpicor : ""}</div>
         </div>
