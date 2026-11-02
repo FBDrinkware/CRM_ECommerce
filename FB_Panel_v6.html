@@ -3451,7 +3451,7 @@ function renderPasos() {
         </div>` : '',
     },
     { id:'fac-anticipo', num:'2', titulo:'Factura de anticipo', icono:'🧾',
-      sub: ps['fac-anticipo']?.noAplica ? 'No requiere factura de anticipo' :
+      sub: (ps['fac-anticipo']?.noAplica || (p.razonSocial||'').toString().trim().toUpperCase() === 'PUBLICO EN GENERAL') ? 'No requiere factura de anticipo' :
            ps['fac-anticipo']?.ok       ? 'Correo enviado' :
            'Solo si el cliente lo solicitó expresamente',
       done: !!(ps['fac-anticipo']?.ok) || !!(ps['fac-anticipo']?.noAplica),
@@ -3459,18 +3459,19 @@ function renderPasos() {
       accionLabel: 'Abrir Gmail',
       tooltip: !ps['fac-anticipo']?.ok && !ps['fac-anticipo']?.noAplica ? 'Recuerda: primero intenta convencer al cliente de esperar la factura de producto' : null,
       campoExtra: (() => {
-        const esPG      = (p.razonSocial||'').toUpperCase() === 'PUBLICO EN GENERAL';
+        const esPG      = (p.razonSocial||'').toString().trim().toUpperCase() === 'PUBLICO EN GENERAL';
         const yaOk      = !!(ps['fac-anticipo']?.ok);        // Gmail enviado
         const noAplica  = !!(ps['fac-anticipo']?.noAplica);  // marcado como no aplica
-        // Auto-persistir si es PG y aún no está guardado
-        if (esPG && !yaOk && !noAplica) {
+        // Auto-persistir si es PG y aún no tiene la marca "no aplica" (también repara pedidos viejos)
+        if (esPG && !noAplica) {
           const tsAuto = new Date().toLocaleString('es-MX');
           S.pasos['fac-anticipo'] = { ok: true, ts: tsAuto, noAplica: true };
           apiPost({ action:'marcarPaso', fbk:p.id, paso:'fac-anticipo',
             valor:true, ts:tsAuto, quien:'Sistema', noAplica:true });
         }
         const checked   = esPG || noAplica ? 'checked' : '';
-        const disabled  = esPG || yaOk     ? 'disabled' : '';
+        // Se puede corregir mientras no se haya capturado el número de la factura de anticipo
+        const disabled  = esPG || (yaOk && !noAplica && p.numFacturaAnticipo) ? 'disabled' : '';
         const label     = esPG
           ? 'No requiere factura de anticipo (Público en General)'
           : 'No requiere factura de anticipo';
@@ -3496,7 +3497,7 @@ function renderPasos() {
         return capturaAnt + `<div class="flex items-center gap-3 mt-3">
           <input type="checkbox" id="chk-no-anticipo" ${checked} ${disabled}
             onchange="toggleNoAplicaAnticipo(this)">
-          <label for="chk-no-anticipo" class="text-xs font-bold text-fb-dark ${esPG||yaOk?'opacity-50':'cursor-pointer'}">
+          <label for="chk-no-anticipo" class="text-xs font-bold text-fb-dark ${disabled?'opacity-50':'cursor-pointer'}">
             ${label}
           </label>
         </div>`;
@@ -3807,7 +3808,7 @@ function gmailFactura() {
   const p = S.pedido; const ov = p.ovEpicor || '(pendiente OV)';
   const asunto = `FACTURA DE ANTICIPO OV — ${ov}`;
   const montoAnticipo = document.getElementById('inp-monto-anticipo')?.value || '(indicar monto)';
-  const body = `Buenos días,\n\nSolicito factura de anticipo. Adjunto CSF.\n\nPedido: ${p.id}\nOV: ${ov}\nCliente: ${p.razonSocial}\nRFC: ${p.rfc||'—'}\nRégimen: ${p.regimenFiscal||'—'}\nUso CFDI: ${p.usoCFDI||'—'}\nCorreo factura: ${p.correo||'—'}\nMonto sin IVA: $${montoAnticipo} MXN\nMétodo SAT: ${p.metodoPagoSAT||'—'}\nForma pago: ${p.formaPago||'—'}\n\nAsesor: ${S.asesor.nombre} (${S.asesor.codigo})\n\nSaludos,`;
+  const body = `Buenos días,\n\nSolicito factura de anticipo. Adjunto CSF.\n\nPedido: ${p.id}\nOV: ${ov}\nCliente: ${p.razonSocial}\nRFC: ${p.rfc||'—'}\nUso CFDI: ${p.usoCFDI||'—'}\nCorreo factura: ${p.correo||'—'}\nMonto sin IVA: $${montoAnticipo} MXN\nMétodo SAT: ${p.metodoPagoSAT||'—'}\nForma pago: ${p.formaPago||'—'}\n\nAsesor: ${S.asesor.nombre} (${S.asesor.codigo})\n\nSaludos,`;
   window.open(`https://mail.google.com/mail/?view=cm&to=${enc(CORREOS.fac)}&su=${enc(asunto)}&body=${enc(body)}`,'_blank');
   marcarPaso('fac-anticipo');
 }
@@ -4656,7 +4657,8 @@ async function toggleNoAplicaAnticipo(el) {
 // Etiqueta para las tarjetas del listado: pedidos con correo de factura de anticipo enviado
 function badgeAnticipo(p) {
   const pa = (p.pasos || {})['fac-anticipo'] || {};
-  if (!pa.ok || pa.noAplica) return '';
+  const esPG = /PUBLICO EN GENERAL/i.test((p.razonSocial || p.empresa || '').toString());
+  if (!pa.ok || pa.noAplica || esPG) return '';
   return ` <span class="font-sans font-bold text-[9px] px-1.5 py-0.5 rounded-full align-middle"
     style="background:#fef3c7;color:#92400e;" title="Correo de factura de anticipo enviado">🧾 Anticipo</span>`;
 }
