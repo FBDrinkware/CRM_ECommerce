@@ -1833,6 +1833,14 @@ function cotGenerarPDF() {
 // SKUs que corresponden a cargos adicionales (no son productos físicos)
 const SKUS_CARGOS = ['ENVIO','CARGO-DISENO','CARGO-GRABADO','CARGO-URGENCIA','CARGO-OTROS'];
 
+// Cantidad vigente de una línea. Una cantidad actual de 0 significa "producto eliminado":
+// antes "cantActual||cantOriginal" trataba el 0 como vacío y regresaba la cantidad original.
+function _cantDe(pr) {
+  const a = pr.cantActual;
+  if (a !== '' && a !== null && a !== undefined && !isNaN(Number(a))) return Number(a);
+  return Number(pr.cantOriginal || pr.cantidad || 0);
+}
+
 function _esCargo(sku) {
   return SKUS_CARGOS.includes((sku||'').toString().toUpperCase());
 }
@@ -1883,7 +1891,7 @@ function abrirModalCotPedido() {
     'Nuestros precios incluyen IVA. El costo unitario incluye un solo grabado.';
 
   // ── Construir resumen de líneas
-  const prods   = (p.productos||[]).filter(pr => !_esCargo(pr.sku));
+  const prods   = (p.productos||[]).filter(pr => !_esCargo(pr.sku) && _cantDe(pr) > 0);
   const cargos  = (p.productos||[]).filter(pr =>  _esCargo(pr.sku));
   const fmt = n => Number(n).toLocaleString('es-MX', {minimumFractionDigits:2});
 
@@ -1891,7 +1899,7 @@ function abrirModalCotPedido() {
   const filasProd = prods.map(pr => {
     const precioOrig = Number(pr.precioOrig||0);
     const precioAct  = Number(pr.precioUnit||pr.precioUnitario||0);
-    const cant       = Number(pr.cantActual||pr.cantOriginal||pr.cantidad||0);
+    const cant       = _cantDe(pr);
     const total      = cant * precioAct;
     const tieneDesc  = precioOrig > 0 && precioOrig !== precioAct;
     return `<div class="flex justify-between items-start px-3 py-2 gap-2">
@@ -1921,7 +1929,7 @@ function abrirModalCotPedido() {
 
   // ── Total general
   const totalProds  = prods.reduce((s, pr) => {
-    const cant = Number(pr.cantActual||pr.cantOriginal||pr.cantidad||0);
+    const cant = _cantDe(pr);
     return s + cant * Number(pr.precioUnit||pr.precioUnitario||0);
   }, 0);
   const totalCargos = cargos.reduce((s, pr) =>
@@ -1946,13 +1954,13 @@ function generarCotPedidoPDF() {
     return d;
   };
 
-  const prods  = (p.productos||[]).filter(pr => !_esCargo(pr.sku));
+  const prods  = (p.productos||[]).filter(pr => !_esCargo(pr.sku) && _cantDe(pr) > 0);
   const cargos = (p.productos||[]).filter(pr =>  _esCargo(pr.sku));
 
   // ── Calcular totales
   let totalConIVA = 0;
   prods.forEach(pr => {
-    const cant = Number(pr.cantActual||pr.cantOriginal||pr.cantidad||0);
+    const cant = _cantDe(pr);
     totalConIVA += cant * Number(pr.precioUnit||pr.precioUnitario||0);
   });
   const totalCargos  = cargos.reduce((s, pr) =>
@@ -1963,7 +1971,7 @@ function generarCotPedidoPDF() {
 
   // ── Filas de productos con descuento si aplica
   const filasProds = prods.map((pr, i) => {
-    const cant       = Number(pr.cantActual||pr.cantOriginal||pr.cantidad||0);
+    const cant       = _cantDe(pr);
     const precioAct  = Number(pr.precioUnit||pr.precioUnitario||0);
     const precioOrig = Number(pr.precioOrig||0);
     const totalLinea = cant * precioAct;
@@ -3893,7 +3901,7 @@ function gmailDiseno() {
     const transf   = aplicaTransf ? (MAPA_TRANSFORMACIONES[skuOrig.toUpperCase()] || null) : null;
     const skuFinal = transf?.skuProd  || skuOrig;
     const descFinal= transf?.descProd || pr.descripcion || '';
-    return `${skuFinal.padEnd(12)}| ${String(pr.cantActual||pr.cantOriginal||0).padStart(4)}  | ${descFinal}`;
+    return `${skuFinal.padEnd(12)}| ${String(_cantDe(pr)).padStart(4)}  | ${descFinal}`;
   }).join('\n');
 
   const asunto = `Solicitud de diseño para vaso venta E-Commerce — ${p.nombreComercial||p.razonSocial||p.nombreContacto} (${p.id})`;
@@ -3999,7 +4007,7 @@ function confirmarEnvioProduccion() {
     const transf    = aplicaTransfProd ? (MAPA_TRANSFORMACIONES[skuOrig.toUpperCase()]||null) : null;
     const skuFinal  = transf?.skuProd  || skuOrig;
     const descFinal = transf?.descProd || pr.descripcion || '';
-    return `${skuFinal.padEnd(10)}|  ${String(pr.cantActual||pr.cantOriginal||0).padStart(3)}  | ${descFinal}`;
+    return `${skuFinal.padEnd(10)}|  ${String(_cantDe(pr)).padStart(3)}  | ${descFinal}`;
   }).join('\n');
   const asunto = `PRODUCCIÓN OV ${ov} — ${p.nombreComercial||p.razonSocial}`;
 
@@ -5598,7 +5606,7 @@ function abrirWaPrimerContacto() {
   const asesorNom = (S.asesor?.nombre || 'tu asesor').split(' ')[0];
 
   // Productos del pedido
-  const prods = (p.productos || []).map(pr => `  • ${pr.cantActual || pr.cantOriginal} pzs de ${pr.descripcion}`).join('\n');
+  const prods = (p.productos || []).filter(pr => _cantDe(pr) > 0).map(pr => `  • ${_cantDe(pr)} pzs de ${pr.descripcion}`).join('\n');
 
   // Determinar checks del contexto activo
   const contexto = document.getElementById('pc-card-seg')?.style.display !== 'none' &&
@@ -5784,7 +5792,7 @@ function abrirModalDatosOV() {
     const unitConIVA  = Number(pr.precioUnit || pr.precio || 0);
     const unitSinIVA  = unitConIVA / 1.16;
     const ivaUnit     = unitConIVA - unitSinIVA;
-    const cant        = Number(pr.cantActual || pr.cantOriginal || 0);
+    const cant        = _cantDe(pr);
     const lineaConIVA = Number(pr.total || unitConIVA * cant);
     const lineaSinIVA = lineaConIVA / 1.16;
     totalConIVA += lineaConIVA;
@@ -5846,7 +5854,7 @@ function copiarTablaEPICOR() {
     const transf     = aplicaTransf ? (MAPA_TRANSFORMACIONES[skuOrig.toUpperCase()] || null) : null;
     const skuProd    = transf?.skuProd  || skuOrig;
     const descProd   = transf?.descProd || pr.descripcion || '';
-    const cant       = Number(pr.cantActual || pr.cantOriginal || 0);
+    const cant       = _cantDe(pr);
     const unitConIVA = Number(pr.precioUnit || pr.precio || 0);
     const unitSinIVA = (unitConIVA / 1.16).toFixed(2);
     // TSV: A=vacío  B=vacío  C=SKU  D=cant  E=vacío  F=desc  G=vacío  H=precio s/IVA
@@ -5877,7 +5885,7 @@ function copiarTablaOV() {
     const unitConIVA = Number(pr.precioUnit || pr.precio || 0);
     const unitSinIVA = unitConIVA / 1.16;
     const ivaUnit    = unitConIVA - unitSinIVA;
-    const cant       = Number(pr.cantActual || pr.cantOriginal || 0);
+    const cant       = _cantDe(pr);
     const lineaConIVA= Number(pr.total || unitConIVA * cant);
     const lineaSinIVA= lineaConIVA / 1.16;
     totalConIVA += lineaConIVA;
