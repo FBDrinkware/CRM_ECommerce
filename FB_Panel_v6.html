@@ -1835,6 +1835,32 @@ const SKUS_CARGOS = ['ENVIO','CARGO-DISENO','CARGO-GRABADO','CARGO-URGENCIA','CA
 
 // Cantidad vigente de una línea. Una cantidad actual de 0 significa "producto eliminado":
 // antes "cantActual||cantOriginal" trataba el 0 como vacío y regresaba la cantidad original.
+// ── Técnica de personalización por línea ──
+function _normTec(t) { return (t||'').toString().trim().normalize('NFD').replace(/[\u0300-\u036f]/g,'').toUpperCase(); }
+// SKU de producción: primero la regla de esa técnica, si no la regla general del SKU
+function _transfDe(pr) {
+  const sku = (pr.sku||'').toString().trim().toUpperCase();
+  const t = _normTec(pr.tecnica);
+  return (t && MAPA_TRANSFORMACIONES[`${sku}|${t}`]) || MAPA_TRANSFORMACIONES[sku] || null;
+}
+function _descConTec(pr, desc) { return `${desc||pr.descripcion||''}${pr.tecnica ? ' + ' + pr.tecnica : ''}`; }
+// Precio de la línea: "$199.00 + DTF $70.00" (con tachados si hay descuento)
+function _precioLineaHtml(pr) {
+  const f = n => '$' + Number(n||0).toFixed(2);
+  const prod = Number(pr.precioProd ?? pr.precioUnit) || 0;
+  const tieneDesc = Number(pr.precioOrig) > 0 && Number(pr.descAcum) > 0;
+  let html = tieneDesc
+    ? `<span class="line-through text-fb-silver mr-1">${f(pr.precioOrig)}</span><span class="text-green-700 font-bold">${f(prod)}</span>`
+    : `<span>${f(prod)}</span>`;
+  if (pr.tecnica && Number(pr.precioTec) > 0 || (pr.tecnica && Number(pr.precioTecOrig) > 0)) {
+    const tDesc = Number(pr.precioTecOrig) > Number(pr.precioTec);
+    html += ` + <span class="text-fb-mid">${pr.tecnica}</span> ` + (tDesc
+      ? `<span class="line-through text-fb-silver mr-1">${f(pr.precioTecOrig)}</span><span class="text-green-700 font-bold">${f(pr.precioTec)}</span>`
+      : `<span>${f(pr.precioTec)}</span>`);
+  }
+  return html;
+}
+
 function _cantDe(pr) {
   const a = pr.cantActual;
   if (a !== '' && a !== null && a !== undefined && !isNaN(Number(a))) return Number(a);
@@ -1905,7 +1931,7 @@ function abrirModalCotPedido() {
     return `<div class="flex justify-between items-start px-3 py-2 gap-2">
       <div class="flex-1 min-w-0">
         <span class="font-mono text-fb-silver mr-1">${pr.sku||'—'}</span>
-        <span class="truncate">${pr.descripcion||pr.descripcionProd||'—'}</span>
+        <span class="truncate">${_descConTec(pr, pr.descripcion||pr.descripcionProd||'—')}</span>
         ${tieneDesc ? `<span class="ml-1 text-[10px] text-fb-silver line-through">$${fmt(precioOrig)}</span>` : ''}
       </div>
       <div class="text-right flex-shrink-0">
@@ -1983,7 +2009,7 @@ function generarCotPedidoPDF() {
       : `$${fmt(precioAct)}`;
     return `<tr style="background:${i%2===0?'#f8f9fb':'#fff'}">
       <td style="padding:8px 10px;font-size:11px;color:#555">${pr.sku||'—'}</td>
-      <td style="padding:8px 10px;font-size:11px">${pr.descripcion||pr.descripcionProd||'—'}</td>
+      <td style="padding:8px 10px;font-size:11px">${_descConTec(pr, pr.descripcion||pr.descripcionProd||'—')}</td>
       <td style="padding:8px 10px;font-size:11px;text-align:center">${cant}</td>
       <td style="padding:8px 10px;font-size:11px;text-align:right">${precioCell}</td>
       <td style="padding:8px 10px;font-size:11px;text-align:center">${tieneDesc ? pctDesc+'%' : '—'}</td>
@@ -2912,8 +2938,8 @@ function irCaptura() {
       return `
       <div class="grid grid-cols-4 px-3 py-2 text-xs ${i%2===0?'':'bg-fb-cream'}">
         <span class="font-mono text-fb-mid">${pr.sku}</span>
-        <span class="col-span-2">${pr.descripcion}${badgeUlt}</span>
-        <span class="text-right font-bold">${pr.cantActual} · $${Number(pr.precioUnit).toFixed(2)}</span>
+        <span class="col-span-2">${_descConTec(pr)}${badgeUlt}</span>
+        <span class="text-right font-bold">${pr.cantActual} · ${_precioLineaHtml(pr)}</span>
       </div>`;
     }).join('') +
     (() => {
@@ -3391,8 +3417,8 @@ function renderSeguimiento() {
           : '';
         return `<div class="grid grid-cols-4 px-3 py-2 text-xs ${i % 2 === 0 ? '' : 'bg-fb-cream'}">
           <span class="font-mono text-fb-mid">${pr.sku}</span>
-          <span class="col-span-2">${pr.descripcion}${badgeUlt}${badgeDesc}</span>
-          <span class="text-right">${pr.cantActual} · ${precioDisplay}</span>
+          <span class="col-span-2">${_descConTec(pr)}${badgeUlt}${badgeDesc}</span>
+          <span class="text-right">${pr.cantActual} · ${_precioLineaHtml(pr)}</span>
         </div>`;
       }).join('') +
       (() => {
@@ -3898,10 +3924,10 @@ function gmailDiseno() {
   const aplicaTransf = (p.grabado === 'Sí' || p.nombresIndividuales === 'Sí' || p.nombresPorVaso === 'Sí');
   const prods = (p.productos||[]).filter(pr => Number(pr.cantActual) > 0).map(pr => {
     const skuOrig  = (pr.sku||'').toString().trim();
-    const transf   = aplicaTransf ? (MAPA_TRANSFORMACIONES[skuOrig.toUpperCase()] || null) : null;
+    const transf   = aplicaTransf ? _transfDe(pr) : null;
     const skuFinal = transf?.skuProd  || skuOrig;
     const descFinal= transf?.descProd || pr.descripcion || '';
-    return `${skuFinal.padEnd(12)}| ${String(_cantDe(pr)).padStart(4)}  | ${descFinal}`;
+    return `${skuFinal.padEnd(12)}| ${String(_cantDe(pr)).padStart(4)}  | ${descFinal}${pr.tecnica ? ' · ' + pr.tecnica : ''}${pr.detallePers ? ' (' + pr.detallePers + ')' : ''}`;
   }).join('\n');
 
   const asunto = `Solicitud de diseño para vaso venta E-Commerce — ${p.nombreComercial||p.razonSocial||p.nombreContacto} (${p.id})`;
@@ -4004,10 +4030,10 @@ function confirmarEnvioProduccion() {
   const aplicaTransfProd = (p.grabado === 'Sí' || p.nombresIndividuales === 'Sí' || p.nombresPorVaso === 'Sí');
   const prods = (p.productos||[]).filter(pr => Number(pr.cantActual) > 0).map(pr => {
     const skuOrig   = (pr.sku||'').toString().trim();
-    const transf    = aplicaTransfProd ? (MAPA_TRANSFORMACIONES[skuOrig.toUpperCase()]||null) : null;
+    const transf    = aplicaTransfProd ? _transfDe(pr) : null;
     const skuFinal  = transf?.skuProd  || skuOrig;
     const descFinal = transf?.descProd || pr.descripcion || '';
-    return `${skuFinal.padEnd(10)}|  ${String(_cantDe(pr)).padStart(3)}  | ${descFinal}`;
+    return `${skuFinal.padEnd(10)}|  ${String(_cantDe(pr)).padStart(3)}  | ${descFinal}${pr.tecnica ? ' · ' + pr.tecnica : ''}${pr.detallePers ? ' (' + pr.detallePers + ')' : ''}`;
   }).join('\n');
   const asunto = `PRODUCCIÓN OV ${ov} — ${p.nombreComercial||p.razonSocial}`;
 
@@ -4233,7 +4259,7 @@ async function guardarModificaciones() {
     const desc = descEl?.value || '';
 
     if (div.id === `prod-edit-${i}` && div.style.opacity === '0.3') {
-      cambios.push({ tipo:'eliminar', skuOrig: prodOrig[i]?.sku });
+      cambios.push({ tipo:'eliminar', skuOrig: prodOrig[i]?.sku, tecnicaOrig: prodOrig[i]?.tecnica || '' });
       return;
     }
     if (i >= prodOrig.length) {
@@ -4243,7 +4269,7 @@ async function guardarModificaciones() {
       const descNueva = selOpt?.dataset?.desc || selOpt?.text?.split('—')[1]?.split('(')[0]?.trim() || '';
       cambios.push({ tipo:'agregar', sku:skuNuevo, desc:descNueva, cant, precio:Number(precio) });
     } else if (skuNuevo !== prodOrig[i]?.sku || cant !== prodOrig[i]?.cantActual) {
-      cambios.push({ tipo:'cambiar', skuOrig:prodOrig[i]?.sku, skuNuevo, cantNueva:cant, desc });
+      cambios.push({ tipo:'cambiar', skuOrig:prodOrig[i]?.sku, tecnicaOrig: prodOrig[i]?.tecnica || '', skuNuevo, cantNueva:cant, desc });
     }
   });
 
@@ -5211,18 +5237,25 @@ function descActualizarTipo() {
     campoLineas.style.display = 'block';
     // Renderizar inputs por SKU
     const prods = (S.pedido?.productos || []).filter(pr => pr.sku && Number(pr.cantActual) > 0);
-    document.getElementById('desc-lineas-lista').innerHTML = prods.map(pr => `
-      <div class="flex items-center gap-2">
-        <span class="font-mono text-[11px] text-fb-mid w-20 flex-shrink-0">${pr.sku}</span>
-        <span class="text-xs text-fb-dark flex-1 truncate">${pr.descripcion}</span>
+    // Una fila por línea (SKU + técnica); si la línea tiene técnica con precio, se puede descontar aparte
+    const inpDesc = (pr, aplica, etiqueta) => `
         <div class="flex items-center gap-1 flex-shrink-0">
+          ${etiqueta ? `<span class="text-[10px] text-fb-silver">${etiqueta}</span>` : ''}
           <input type="number" min="0" max="${_descMaxPct}" step="0.01" placeholder="0"
-            data-sku="${pr.sku}"
+            data-sku="${pr.sku}" data-tec="${pr.tecnica||''}" data-aplica="${aplica}"
             class="desc-linea-pct border border-fb-light rounded-lg px-2 py-1 text-xs w-16 outline-none text-right"
             oninput="descActualizarPreview()">
           <span class="text-xs text-fb-silver">%</span>
-        </div>
-      </div>`).join('');
+        </div>`;
+    document.getElementById('desc-lineas-lista').innerHTML = prods.map(pr => {
+      const conTec = pr.tecnica && Number(pr.precioTecOrig || pr.precioTec) > 0;
+      return `
+      <div class="flex items-center gap-2 flex-wrap">
+        <span class="font-mono text-[11px] text-fb-mid w-20 flex-shrink-0">${pr.sku}</span>
+        <span class="text-xs text-fb-dark flex-1 truncate">${_descConTec(pr)}</span>
+        ${inpDesc(pr, 'producto', conTec ? 'Producto' : '')}
+        ${conTec ? inpDesc(pr, 'tecnica', pr.tecnica) : ''}
+      </div>`; }).join('');
   } else {
     campoLineas.style.display = 'none';
     campoGlobal.style.display = 'block';
@@ -5255,7 +5288,7 @@ function descActualizarPreview() {
     const inputs = document.querySelectorAll('.desc-linea-pct');
     inputs.forEach(inp => {
       const pct = Math.min(parseFloat(inp.value) || 0, _descMaxPct);
-      if (pct > 0) lineasDesc.push({ sku: inp.dataset.sku, pctEfectivo: pct });
+      if (pct > 0) lineasDesc.push({ sku: inp.dataset.sku, tecnica: inp.dataset.tec || '', aplicaA: inp.dataset.aplica || 'producto', pctEfectivo: pct });
     });
   }
 
@@ -5266,13 +5299,20 @@ function descActualizarPreview() {
 
   let nuevoSubtotal = 0;
   const linesHtml = prods.map(pr => {
-    const ld = lineasDesc.find(l => l.sku === pr.sku);
-    const pct = ld ? ld.pctEfectivo : 0;
-    const precioActual = Number(pr.precioUnit);
-    const nuevoPrecio = pct > 0 ? Math.round(precioActual * (1 - pct / 100) * 100) / 100 : precioActual;
+    // Global: aplica a producto y técnica. Por línea: según "Producto" / técnica
+    const glob = tipo !== 'pct-linea';
+    const ldP = lineasDesc.find(l => l.sku === pr.sku && (glob || ((l.tecnica||'') === (pr.tecnica||'') && l.aplicaA === 'producto')));
+    const ldT = lineasDesc.find(l => l.sku === pr.sku && (glob || ((l.tecnica||'') === (pr.tecnica||'') && l.aplicaA === 'tecnica')));
+    const pctP = ldP ? ldP.pctEfectivo : 0, pctT = ldT ? ldT.pctEfectivo : 0;
+    const prod = Number(pr.precioProd ?? pr.precioUnit) || 0, tec = Number(pr.precioTec) || 0;
+    const nProd = pctP > 0 ? Math.round(prod * (1 - pctP / 100) * 100) / 100 : prod;
+    const nTec  = pctT > 0 ? Math.round(tec  * (1 - pctT / 100) * 100) / 100 : tec;
+    const precioActual = prod + tec;
+    const nuevoPrecio = nProd + nTec;
+    const pct = precioActual > 0 ? (1 - nuevoPrecio / precioActual) * 100 : 0;
     const nuevoTotal = nuevoPrecio * Number(pr.cantActual);
     nuevoSubtotal += nuevoTotal;
-    if (pct === 0) return '';
+    if (pctP === 0 && pctT === 0) return '';
     return `<div class="flex justify-between text-[11px]">
       <span class="text-fb-mid">${pr.sku} ×${pr.cantActual}</span>
       <span><span class="line-through text-fb-silver mr-1">$${precioActual.toFixed(2)}</span>
@@ -5308,7 +5348,7 @@ async function confirmarDescuento() {
     const inputs = document.querySelectorAll('.desc-linea-pct');
     inputs.forEach(inp => {
       const pct = Math.min(parseFloat(inp.value) || 0, _descMaxPct);
-      if (pct > 0) lineas.push({ sku: inp.dataset.sku, pct });
+      if (pct > 0) lineas.push({ sku: inp.dataset.sku, tecnica: inp.dataset.tec || '', aplicaA: inp.dataset.aplica || 'producto', pct });
     });
     if (!lineas.length) return showToast('Ingresa al menos un porcentaje', 'error');
   }
@@ -5784,7 +5824,7 @@ function abrirModalDatosOV() {
   let totalConIVA = 0, totalSinIVA = 0;
   const filas = prods.map((pr, i) => {
     const skuOrig     = (pr.sku || '').toString().trim();
-    const transf      = aplicaTransf ? (MAPA_TRANSFORMACIONES[skuOrig.toUpperCase()] || null) : null;
+    const transf      = aplicaTransf ? _transfDe(pr) : null;
     const skuProd     = transf ? transf.skuProd  : skuOrig;
     const descProd    = transf ? transf.descProd : (pr.descripcion || '—');
     const tieneTransf = !!(transf && transf.skuProd && transf.skuProd !== skuOrig);
@@ -5851,7 +5891,7 @@ function copiarTablaEPICOR() {
   const aplicaTransf = (p.grabado === 'Sí' || p.nombresIndividuales === 'Sí' || p.nombresPorVaso === 'Sí');
   const rows = prods.map(pr => {
     const skuOrig    = (pr.sku || '').toString().trim();
-    const transf     = aplicaTransf ? (MAPA_TRANSFORMACIONES[skuOrig.toUpperCase()] || null) : null;
+    const transf     = aplicaTransf ? _transfDe(pr) : null;
     const skuProd    = transf?.skuProd  || skuOrig;
     const descProd   = transf?.descProd || pr.descripcion || '';
     const cant       = _cantDe(pr);
@@ -5879,7 +5919,7 @@ function copiarTablaOV() {
   let totalConIVA = 0, totalSinIVA = 0;
   prods.forEach(pr => {
     const skuOrig    = (pr.sku || '').toString().trim();
-    const transf     = aplicaTransf ? (MAPA_TRANSFORMACIONES[skuOrig.toUpperCase()] || null) : null;
+    const transf     = aplicaTransf ? _transfDe(pr) : null;
     const skuProd    = transf?.skuProd  || '— igual —';
     const descProd   = transf?.descProd || '— igual —';
     const unitConIVA = Number(pr.precioUnit || pr.precio || 0);
