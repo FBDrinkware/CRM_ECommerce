@@ -1861,6 +1861,38 @@ function _precioLineaHtml(pr) {
   return html;
 }
 
+function _aplicaTransf(p) {
+  return p.grabado === 'Sí' || p.nombresIndividuales === 'Sí' || p.nombresPorVaso === 'Sí' ||
+    (p.productos || []).some(pr => pr.tecnica);
+}
+// Técnicas disponibles y su precio por pieza (con IVA). Se pueden cambiar en la hoja Config:
+// PRECIO_LOGO_EXTRA · PRECIO_360 · PRECIO_DTF (o PRECIO_DTF_UV) · PRECIO_DTF_TEXTIL · PRECIO_BORDADO
+let TEC_PRECIOS = { logoExtra: 15, p360: 50, dtf: 70, dtfTextil: 0, bordado: 0 };
+function _tecnicasLista() {
+  return [
+    { n: '', p: 0, t: 'Sin técnica' },
+    { n: 'Láser', p: 0 },
+    { n: 'Láser (2 logos)', p: TEC_PRECIOS.logoExtra },
+    { n: 'Láser (3 logos)', p: TEC_PRECIOS.logoExtra * 2 },
+    { n: '360°', p: TEC_PRECIOS.p360 },
+    { n: 'DTF UV', p: TEC_PRECIOS.dtf },
+    { n: 'DTF Textil', p: TEC_PRECIOS.dtfTextil },
+    { n: 'Bordado', p: TEC_PRECIOS.bordado },
+  ];
+}
+function _tecSelectHtml(id, actual) {
+  const lista = _tecnicasLista();
+  if (actual && !lista.some(t => t.n === actual)) lista.push({ n: actual, p: 0 });
+  return `<select id="${id}" class="w-full border border-fb-light rounded-xl px-3 py-2 text-sm" onchange="_tecSugerirPrecio(this)">
+    ${lista.map(t => `<option value="${t.n}" data-precio="${t.p}" ${t.n === (actual || '') ? 'selected' : ''}>${t.t || t.n}${t.p ? ` (+$${t.p})` : ''}</option>`).join('')}
+  </select>`;
+}
+// Al cambiar la técnica se propone su precio; el asesor lo puede ajustar
+function _tecSugerirPrecio(sel) {
+  const inp = document.getElementById(sel.id.replace('pe-tec-', 'pe-ptec-'));
+  if (inp) inp.value = sel.options[sel.selectedIndex].dataset.precio || 0;
+}
+
 function _cantDe(pr) {
   const a = pr.cantActual;
   if (a !== '' && a !== null && a !== undefined && !isNaN(Number(a))) return Number(a);
@@ -2572,6 +2604,12 @@ async function cargarConfig() {
     if (c.CORREOS_DISENO) CORREOS.dis  = c.CORREOS_DISENO;
     if (c.DATOS_BANCO)  DATOS_BANCO   = c.DATOS_BANCO;
     if (c.WHATSAPP_NUM) WHATSAPP_NUM  = c.WHATSAPP_NUM;
+    if (c.PRECIO_LOGO_EXTRA !== undefined && c.PRECIO_LOGO_EXTRA !== '') TEC_PRECIOS.logoExtra = Number(c.PRECIO_LOGO_EXTRA);
+    if (c.PRECIO_360 !== undefined && c.PRECIO_360 !== '') TEC_PRECIOS.p360 = Number(c.PRECIO_360);
+    if (c.PRECIO_DTF !== undefined && c.PRECIO_DTF !== '') TEC_PRECIOS.dtf = Number(c.PRECIO_DTF);
+    if (c.PRECIO_DTF_UV !== undefined && c.PRECIO_DTF_UV !== '') TEC_PRECIOS.dtf = Number(c.PRECIO_DTF_UV);
+    if (c.PRECIO_DTF_TEXTIL !== undefined && c.PRECIO_DTF_TEXTIL !== '') TEC_PRECIOS.dtfTextil = Number(c.PRECIO_DTF_TEXTIL);
+    if (c.PRECIO_BORDADO !== undefined && c.PRECIO_BORDADO !== '') TEC_PRECIOS.bordado = Number(c.PRECIO_BORDADO);
   }
   if (resProds.ok) { CATALOGO_PRODS = resProds.productos; initCotizador(); }
   if (resTrans.ok) MAPA_TRANSFORMACIONES = resTrans.mapa || {};
@@ -2635,7 +2673,7 @@ function renderLista(lista, contenedorId, esPorAtender) {
 function renderPendientesPorEtapa(todos) {
   const CERRADOS = ['Entregado','Cancelado'];
   const requiereDiseno = p =>
-    p.grabado === 'Sí' || p.nombresIndividuales === 'Sí' || p.nombresPorVaso === 'Sí';
+    _aplicaTransf(p);
   const disenoCubierto = p =>
     !requiereDiseno(p) || p.pasos?.['diseno-aprobado']?.ok;
 
@@ -3921,7 +3959,7 @@ function gmailDiseno() {
   const p = S.pedido;
   if (!p) return;
 
-  const aplicaTransf = (p.grabado === 'Sí' || p.nombresIndividuales === 'Sí' || p.nombresPorVaso === 'Sí');
+  const aplicaTransf = _aplicaTransf(p);
   const prods = (p.productos||[]).filter(pr => Number(pr.cantActual) > 0).map(pr => {
     const skuOrig  = (pr.sku||'').toString().trim();
     const transf   = aplicaTransf ? _transfDe(pr) : null;
@@ -4027,7 +4065,7 @@ function confirmarEnvioProduccion() {
   const dir = (!p.dirEnvio || p.dirEnvio === 'PENDIENTE')
     ? 'PENDIENTE — se enviará en respuesta a este correo'
     : `${p.dirEnvio}, ${p.ciudadEnvio||''}, ${p.estadoEnvio||''} C.P. ${p.cpEnvio||''}`;
-  const aplicaTransfProd = (p.grabado === 'Sí' || p.nombresIndividuales === 'Sí' || p.nombresPorVaso === 'Sí');
+  const aplicaTransfProd = _aplicaTransf(p);
   const prods = (p.productos||[]).filter(pr => Number(pr.cantActual) > 0).map(pr => {
     const skuOrig   = (pr.sku||'').toString().trim();
     const transf    = aplicaTransfProd ? _transfDe(pr) : null;
@@ -4211,6 +4249,11 @@ function abrirModificarProductos() {
       </div>
       <div class="campo"><label>Descripción</label>
         <input type="text" value="${pr.descripcion}" id="pe-desc-${i}"></div>
+      <div class="grid grid-cols-3 gap-2 mt-2">
+        <div class="campo col-span-2"><label>Técnica</label>${_tecSelectHtml(`pe-tec-${i}`, pr.tecnica)}</div>
+        <div class="campo"><label>$ técnica c/u</label>
+          <input type="number" min="0" step="0.01" value="${Number(pr.precioTec) || 0}" id="pe-ptec-${i}"></div>
+      </div>
       ${!prodIniciada ? `<button onclick="eliminarLineaEditor(${i})" class="text-red-500 text-xs font-bold mt-1">🗑 Eliminar línea</button>` : ''}
     </div>`).join('');
 
@@ -4236,6 +4279,11 @@ function agregarLineaEditor() {
       <div class="campo"><label>Cantidad</label>
         <input type="number" id="pe-cant-${idx}" value="1" min="1"></div>
     </div>
+    <div class="grid grid-cols-3 gap-2 mb-2">
+      <div class="campo col-span-2"><label>Técnica</label>${_tecSelectHtml(`pe-tec-${idx}`, 'Láser')}</div>
+      <div class="campo"><label>$ técnica c/u</label>
+        <input type="number" min="0" step="0.01" value="0" id="pe-ptec-${idx}"></div>
+    </div>
     <button onclick="this.parentElement.remove()" class="text-red-500 text-xs font-bold">🗑 Quitar</button>`;
   editor.appendChild(div);
 }
@@ -4257,6 +4305,10 @@ async function guardarModificaciones() {
     const cant = parseInt(cantEl.value);
     const skuNuevo = skuEl.value;
     const desc = descEl?.value || '';
+    const tecEl  = div.querySelector(`[id^=pe-tec-]`);
+    const ptecEl = div.querySelector(`[id^=pe-ptec-]`);
+    const tec  = tecEl ? tecEl.value : undefined;
+    const ptec = ptecEl ? (Number(ptecEl.value) || 0) : undefined;
 
     if (div.id === `prod-edit-${i}` && div.style.opacity === '0.3') {
       cambios.push({ tipo:'eliminar', skuOrig: prodOrig[i]?.sku, tecnicaOrig: prodOrig[i]?.tecnica || '' });
@@ -4267,9 +4319,15 @@ async function guardarModificaciones() {
       const selOpt = skuEl.options?.[skuEl.selectedIndex];
       const precio = selOpt?.dataset?.precio || 0;
       const descNueva = selOpt?.dataset?.desc || selOpt?.text?.split('—')[1]?.split('(')[0]?.trim() || '';
-      cambios.push({ tipo:'agregar', sku:skuNuevo, desc:descNueva, cant, precio:Number(precio) });
-    } else if (skuNuevo !== prodOrig[i]?.sku || cant !== prodOrig[i]?.cantActual) {
-      cambios.push({ tipo:'cambiar', skuOrig:prodOrig[i]?.sku, tecnicaOrig: prodOrig[i]?.tecnica || '', skuNuevo, cantNueva:cant, desc });
+      cambios.push({ tipo:'agregar', sku:skuNuevo, desc:descNueva, cant, precio:Number(precio), tecnica: tec || '', precioTec: ptec || 0 });
+    } else {
+      const o = prodOrig[i] || {};
+      const tecCambio = tec !== undefined && (tec !== (o.tecnica || '') || ptec !== (Number(o.precioTec) || 0));
+      if (skuNuevo !== o.sku || cant !== o.cantActual || tecCambio) {
+        const c = { tipo:'cambiar', skuOrig:o.sku, tecnicaOrig: o.tecnica || '', skuNuevo, cantNueva:cant, desc };
+        if (tecCambio) { c.tecnicaNueva = tec; c.precioTecNuevo = ptec; }
+        cambios.push(c);
+      }
     }
   });
 
@@ -4297,9 +4355,9 @@ function gmailModificacion(cambios) {
   const p = S.pedido;
   const asunto = `MODIFICACIÓN OV ${p.ovEpicor||'—'} — ${p.nombreComercial||p.razonSocial}`;
   const detalle = cambios.map(c => {
-    if (c.tipo==='cambiar') return `CAMBIO: ${c.skuOrig} → ${c.skuNuevo||c.skuOrig} (cant: ${c.cantNueva})`;
-    if (c.tipo==='eliminar') return `ELIMINADO: ${c.skuOrig}`;
-    if (c.tipo==='agregar')  return `AGREGADO: ${c.sku} x${c.cant}`;
+    if (c.tipo==='cambiar') return `CAMBIO: ${c.skuOrig}${c.tecnicaOrig ? ' (' + c.tecnicaOrig + ')' : ''} → ${c.skuNuevo||c.skuOrig}${c.tecnicaNueva !== undefined ? ' (' + (c.tecnicaNueva || 'sin técnica') + ')' : ''} (cant: ${c.cantNueva})`;
+    if (c.tipo==='eliminar') return `ELIMINADO: ${c.skuOrig}${c.tecnicaOrig ? ' (' + c.tecnicaOrig + ')' : ''}`;
+    if (c.tipo==='agregar')  return `AGREGADO: ${c.sku} x${c.cant}${c.tecnica ? ' (' + c.tecnica + ')' : ''}`;
   }).join('\n');
   const body = `Equipo,\n\nSe realizó una modificación al pedido en producción:\n\nOV: ${p.ovEpicor}\nCliente: ${p.nombreComercial||p.razonSocial}\n\nCambios:\n${detalle}\n\nAsesor: ${S.asesor.nombre} (${S.asesor.codigo})\n\nFavor de confirmar si es posible aplicar los cambios.\n\nSaludos,`;
   window.open(`https://mail.google.com/mail/?view=cm&to=${enc(CORREOS.prod)}&su=${enc(asunto)}&body=${enc(body)}`,'_blank');
@@ -5818,7 +5876,7 @@ function abrirModalDatosOV() {
   const fmt   = n => Number(n).toLocaleString('es-MX',{minimumFractionDigits:2,maximumFractionDigits:2});
   const prods = (p.productos || []).filter(pr => Number(pr.cantActual) > 0);
   // Solo aplica transformación si el pedido lleva grabado o nombres
-  const aplicaTransf = (p.grabado === 'Sí' || p.nombresIndividuales === 'Sí' || p.nombresPorVaso === 'Sí');
+  const aplicaTransf = _aplicaTransf(p);
 
   // Filas
   let totalConIVA = 0, totalSinIVA = 0;
@@ -5888,7 +5946,7 @@ function copiarTablaEPICOR() {
   const p = S.pedido;
   if (!p) return;
   const prods = (p.productos || []).filter(pr => Number(pr.cantActual) > 0);
-  const aplicaTransf = (p.grabado === 'Sí' || p.nombresIndividuales === 'Sí' || p.nombresPorVaso === 'Sí');
+  const aplicaTransf = _aplicaTransf(p);
   const rows = prods.map(pr => {
     const skuOrig    = (pr.sku || '').toString().trim();
     const transf     = aplicaTransf ? _transfDe(pr) : null;
@@ -5909,7 +5967,7 @@ function copiarTablaOV() {
   if (!p) return;
   const fmt  = n => Number(n).toLocaleString('es-MX',{minimumFractionDigits:2,maximumFractionDigits:2});
   const prods = (p.productos || []).filter(pr => Number(pr.cantActual) > 0);
-  const aplicaTransf = (p.grabado === 'Sí' || p.nombresIndividuales === 'Sí' || p.nombresPorVaso === 'Sí');
+  const aplicaTransf = _aplicaTransf(p);
   let lines = [];
   lines.push(`DATOS OV — ${p.razonSocial||p.nombreComercial||p.nombreContacto} (${p.id})`);
   lines.push(`Contacto: ${p.nombreContacto||'—'} | Fecha de necesidad: ${fmtFecha(p.fechaLimite)||'—'}`);
